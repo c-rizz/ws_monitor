@@ -31,13 +31,13 @@ def main() -> None:
     ap.add_argument("--server", default="tcp://127.0.0.1:8142", type=str, help="Address of the aggregator server.")
     ap.set_defaults(feature=True)
     args = vars(ap.parse_args())
-    bind_to = args["server"]
 
     system_state_topic = b'system_stats'
     pub_period_sec = 1.0
     ctx = zmq.Context()
     s = ctx.socket(zmq.PUB)
-    s.bind(bind_to)
+    s.connect(args["server"])
+
 
     print(f"Starting broadcast on topic '{system_state_topic}'")
     time.sleep(1.0)

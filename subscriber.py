@@ -28,11 +28,11 @@ def get_stats_recap():
                         f" VRAM:"+str([f"{gpu['stats']['gpu_mem_fill_rate']*100:.2f}%" for gpu in gpus.values()])+" \t\n")
         return s
 
-def receiver_worker(connect_to : str):
+def receiver_worker(bind_to : str):
     system_state_topic = b'system_stats'
     ctx = zmq.Context()
     s = ctx.socket(zmq.SUB)
-    s.connect(connect_to)
+    s.bind(bind_to)
 
     s.setsockopt(zmq.SUBSCRIBE, system_state_topic)
     try:
@@ -48,10 +48,9 @@ def main() -> None:
     ap.add_argument("--server", default="tcp://127.0.0.1:8142", type=str, help="Address of the aggregator server.")
     ap.set_defaults(feature=True)
     args = vars(ap.parse_args())
-    connect_to = args["server"]
 
     worker = threading.Thread(  target = receiver_worker,
-                                kwargs = { "connect_to" : connect_to})
+                                kwargs = { "bind_to" : args["server"]})
     worker.start()
 
     while True:

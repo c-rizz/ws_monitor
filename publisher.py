@@ -43,8 +43,8 @@ def get_memory_usage_by_user():
     return user_pssratio
 
 def get_cpu_infos():
-    return {    "cpu_utilization_ratio" : psutil.virtual_memory().used / psutil.virtual_memory().total,
-                "cpu_mem_fill_ratio" : psutil.cpu_percent()/100,
+    return {    "cpu_utilization_ratio" : psutil.cpu_percent()/100,
+                "cpu_mem_fill_ratio" : psutil.virtual_memory().used / psutil.virtual_memory().total,
                 "memratio_by_user" : get_memory_usage_by_user()}
 
 def main() -> None:

@@ -3,7 +3,7 @@
 # Get folder where the install script is located
 cd $(dirname $0)
 dname=$(realpath $(dirname $0))
-sudo apt install -y smem python3-venv
+sudo apt update && sudo apt install -y smem python3-venv
 rm -rf virtualenv
 mkdir virtualenv
 cd virtualenv

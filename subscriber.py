@@ -33,8 +33,8 @@ def get_stats_recap():
                         f" RAM:{cpu_stats['cpu_mem_fill_ratio']*100:.2f}% \t".ljust(spacing) +
                         (f" GPU:"+str([f"{gpu['stats']['gpu_proc_utilization_ratio']:.2f}%" for gpu in gpus.values()])+" \t").ljust(spacing) +
                         (f" VRAM:"+str([f"{gpu['stats']['gpu_mem_fill_ratio']*100:.2f}%" for gpu in gpus.values()])).ljust(spacing)+
-                        (f" top_mem_user:"+str(top_mem_user_str).ljust(spacing))+
-                        (f" top_vram_users:"+str(top_vram_users).ljust(spacing))+
+                        (f" top_mem_user:"+str(top_mem_user_str).ljust(15))+
+                        (f" top_vram_users:"+str(top_vram_users).ljust(15))+
                         "\n")
         return s
 

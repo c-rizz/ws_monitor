@@ -36,6 +36,7 @@ def get_gpus_infos():
     return gpu_infos
 
 def get_memory_usage_by_user():
+    return {"None":0.0}
     out = subprocess.check_output("sudo smem -up -c \"user pss\" -s pss", shell=True).decode("utf-8")
     lines_user_pss = list(reversed([l.split() for l in out.splitlines()]))[:-1]
     print(f"{lines_user_pss}")

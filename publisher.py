@@ -6,6 +6,9 @@ import zmq
 import json
 import pynvml
 import socket
+import psutil
+import subprocess
+import re
 
 pynvml.nvmlInit()
 def get_gpus_infos():
@@ -15,20 +18,38 @@ def get_gpus_infos():
         handle = pynvml.nvmlDeviceGetHandleByIndex(i)
         util = pynvml.nvmlDeviceGetUtilizationRates(handle)
         mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        procs = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
+        user_mem_usageratio = {}
+        for proc in procs:
+            user = psutil.Process(proc.pid).username()
+            if user not in user_mem_usageratio:
+                user_mem_usageratio[user] = 0.0
+            user_mem_usageratio[user] += proc.usedGpuMemory/mem.total
+        print(f"user_mem_usageratio = {user_mem_usageratio}")
         gpu_infos[str(i)] = {   "name" : pynvml.nvmlDeviceGetName(handle),
                                 "memory_size_bytes" : mem.total,
-                                "stats" : { "gpu_proc_utilization_rate" : util.gpu,
+                                "stats" : { "gpu_proc_utilization_ratio" : util.gpu,
                                             "gpu_mem_util" : util.memory,
-                                            "gpu_mem_fill_rate" : 1-mem.free/mem.total}}
+                                            "gpu_mem_fill_ratio" : 1-mem.free/mem.total,
+                                            },
+                                "memratio_by_user" : user_mem_usageratio}
     return gpu_infos
 
+def get_memory_usage_by_user():
+    out = subprocess.check_output("sudo smem -up -c \"user pss\" -s pss", shell=True).decode("utf-8")
+    lines_user_pss = list(reversed([l.split() for l in out.splitlines()]))[:-1]
+    print(f"{lines_user_pss}")
+    user_pssratio = {l[0]: float(l[1][:-1])/100 for l in lines_user_pss}
+    return user_pssratio
+
 def get_cpu_infos():
-    return {    "cpu_utilization_rate" : float("nan"),
-                "cpu_mem_fill_rate" : float("nan")}
+    return {    "cpu_utilization_ratio" : psutil.virtual_memory().used / psutil.virtual_memory().total,
+                "cpu_mem_fill_ratio" : psutil.cpu_percent()/100,
+                "memratio_by_user" : get_memory_usage_by_user()}
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--server", default="tcp://127.0.0.1:8142", type=str, help="Address of the aggregator server.")
+    ap.add_argument("--server", default="tcp://127.0.0.1:9452", type=str, help="Address of the aggregator server.")
     ap.set_defaults(feature=True)
     args = vars(ap.parse_args())
 

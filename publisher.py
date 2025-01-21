@@ -25,7 +25,7 @@ def get_gpus_infos():
             if user not in user_mem_usageratio:
                 user_mem_usageratio[user] = 0.0
             user_mem_usageratio[user] += proc.usedGpuMemory/mem.total
-        print(f"user_mem_usageratio = {user_mem_usageratio}")
+        print(f"gpu user_mem_usageratio = {user_mem_usageratio}")
         gpu_infos[str(i)] = {   "name" : pynvml.nvmlDeviceGetName(handle),
                                 "memory_size_bytes" : mem.total,
                                 "stats" : { "gpu_proc_utilization_ratio" : util.gpu,
@@ -35,7 +35,7 @@ def get_gpus_infos():
                                 "memratio_by_user" : user_mem_usageratio}
     return gpu_infos
 
-def get_memory_usage_by_user():
+def get_memory_usage_by_user_smem():
     return {"None":0.0}
     out = subprocess.check_output("sudo smem -up -c \"user pss\" -s pss", shell=True).decode("utf-8")
     lines_user_pss = list(reversed([l.split() for l in out.splitlines()]))[:-1]
@@ -43,10 +43,30 @@ def get_memory_usage_by_user():
     user_pssratio = {l[0]: float(l[1][:-1])/100 for l in lines_user_pss}
     return user_pssratio
 
+def get_memory_usage_by_user_psutil():
+    user_memory = {}
+
+    for proc in psutil.process_iter(attrs=['username', 'memory_info']):
+        try:
+            username = proc.info['username']
+            memory_info = proc.info['memory_info']
+            if username and memory_info:
+                # Convert memory usage to MB
+                memory_used_mb = memory_info.rss
+                user_memory[username] = user_memory.get(username, 0) + memory_used_mb
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+    total_memory = psutil.virtual_memory().total
+
+    # Calculate memory usage as a percentage for each user
+    user_memory_percentage = {user: used / total_memory for user, used in user_memory.items()}
+    return user_memory_percentage
+
 def get_cpu_infos():
     return {    "cpu_utilization_ratio" : psutil.cpu_percent()/100,
                 "cpu_mem_fill_ratio" : psutil.virtual_memory().used / psutil.virtual_memory().total,
-                "memratio_by_user" : get_memory_usage_by_user()}
+                "memratio_by_user" : get_memory_usage_by_user_psutil()}
 
 def main() -> None:
     ap = argparse.ArgumentParser()

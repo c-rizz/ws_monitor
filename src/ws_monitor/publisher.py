@@ -8,7 +8,7 @@ import pynvml
 import socket
 import psutil
 import subprocess
-import re
+import shutil
 
 pynvml.nvmlInit()
 def get_gpus_infos():
@@ -68,11 +68,21 @@ def get_cpu_infos():
                 "cpu_mem_fill_ratio" : psutil.virtual_memory().used / psutil.virtual_memory().total,
                 "memratio_by_user" : get_memory_usage_by_user_psutil()}
 
+def get_disk_info():
+    total, used, free = shutil.disk_usage("/")
+    return {"stats" : { "disk_total_size" : total,
+                        "disk_used_size" : used,
+                        "disk_free_size" : free,
+                        "disk_usage_ratio" : used/total}}
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--server", default="tcp://127.0.0.1:9452", type=str, help="Address of the aggregator server.")
-    ap.set_defaults(feature=True)
+    ap.add_argument("--config", default=None, type=str, help="Config file to loadConfig file to load")
     args = vars(ap.parse_args())
+
+    if args["config"] is not None:
+        raise NotImplementedError()
 
     system_state_topic = b'system_stats'
     pub_period_sec = 1.0
@@ -90,6 +100,7 @@ def main() -> None:
             data["hostname"] = socket.gethostname()
             data["gpu"] = get_gpus_infos()
             data["cpu"] = get_cpu_infos()
+            data["disk"] = get_disk_info()
 
             msg = json.dumps(data)
             s.send_multipart([system_state_topic, msg.encode("utf8")])

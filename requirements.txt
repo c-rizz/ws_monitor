@@ -1,3 +1,4 @@
 nvidia-ml-py==12.560.30
 pyzmq==26.2.0
 psutil
+pyyaml==6.0.2

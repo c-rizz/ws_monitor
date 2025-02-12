@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ws_monitor"
+version = "0.0.1"
+authors = [
+  { name="Carlo Rizzardo", email="cr.git.mail@gmail.com" },
+]
+description = "Workstation Monitor"
+readme = "README.md"
+requires-python = ">=3.8.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Linux",
+]
+
+dependencies = [
+    "nvidia-ml-py==12.560.30",
+    "pyzmq==26.2.0",
+    "psutil",
+    "pyyaml==6.0.2",
+    "flask==3.1.0"
+]
+
+[project.scripts]
+publisher = "ws_monitor.publisher:main"
+web_page = "ws_monitor.publisher:web_page"
+[tool.setuptools]
+script-files = ["src/ws_monitor/run_flask.sh"]

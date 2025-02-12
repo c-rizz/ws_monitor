@@ -22,7 +22,7 @@ dependencies = [
     "pyzmq==26.2.0",
     "psutil",
     "pyyaml==6.0.2",
-    "flask==3.1.0"
+    "flask"
 ]
 
 [project.scripts]

@@ -58,7 +58,11 @@ class Subscriber():
                         top_vram_user = max(gpu["memratio_by_user"].items(), key=lambda user_ratio: user_ratio[1]) if len(gpu["memratio_by_user"])>0 else ("None",0.0)
                         top_vram_users += top_vram_user[0]+f" {top_vram_user[1]*100:.1f}%"
                     cpu_stats = data["cpu"]
-                    disk = data["disk"]
+                    disk = data.get("disk",None)
+                    if disk is not None:
+                        disk_str = str([f"{disk['stats']['disk_usage_ratio']*100:.2f}%" for gpu in gpus.values()])
+                    else:
+                        disk_str = "N/A"
                     top_mem_user = max(cpu_stats["memratio_by_user"].items(), key=lambda user_ratio: user_ratio[1])
                     top_mem_user_str = top_mem_user[0]+f" {top_mem_user[1]*100:.1f}%"
                     lines.append(    ([f"{data['hostname']}[{age:.1f}s]",
@@ -66,7 +70,7 @@ class Subscriber():
                                         f" RAM:{cpu_stats['cpu_mem_fill_ratio']*100:.2f}% ",
                                         f" GPU:"+str([f"{gpu['stats']['gpu_proc_utilization_ratio']:.2f}%" for gpu in gpus.values()]),
                                         f" VRAM:"+str([f"{gpu['stats']['gpu_mem_fill_ratio']*100:.2f}%" for gpu in gpus.values()]),
-                                        f" disk:"+str([f"{disk['stats']['disk_usage_ratio']*100:.2f}%" for gpu in gpus.values()]),
+                                        f" disk:{disk_str}",
                                         f" top_mem_user:"+str(top_mem_user_str),
                                         f" top_vram_users:"+str(top_vram_users),
                                         f" active_users:"+str(self.get_active_users(data))], age, False))

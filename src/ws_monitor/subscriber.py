@@ -76,7 +76,7 @@ class Subscriber():
                         age = time.time()-data['last_contact']
                     except Exception:
                         age = None
-                    lines.append((f"{data['hostname']}: ERROR interpreting data. {e}", age, True))
+                    lines.append((f"{data['hostname']}: ERROR interpreting data. {e}\n", age, True))
             
             if len(lines)>0:
                 cols = 0

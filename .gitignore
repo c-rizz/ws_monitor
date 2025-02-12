@@ -1,3 +1,4 @@
 virtualenv/*
 .vscode/*
 *egg-info*
+*.pyc

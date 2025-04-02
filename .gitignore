@@ -2,3 +2,6 @@ virtualenv/*
 .vscode/*
 *egg-info*
 *.pyc
+.vscode*
+__pycache__/*
+build/*

@@ -21,11 +21,15 @@ def get_gpus_infos():
         procs = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
         user_mem_usageratio = {}
         for proc in procs:
-            user = psutil.Process(proc.pid).username()
+            try:
+                user = psutil.Process(proc.pid).username()
+            except psutil.NoSuchProcess as e:
+                print(f"Error getting process info for pid {proc.pid}")
+                user = "???"
             if user not in user_mem_usageratio:
                 user_mem_usageratio[user] = 0.0
             user_mem_usageratio[user] += proc.usedGpuMemory/mem.total
-        print(f"gpu user_mem_usageratio = {user_mem_usageratio}")
+        #print(f"gpu user_mem_usageratio = {user_mem_usageratio}")
         gpu_infos[str(i)] = {   "name" : pynvml.nvmlDeviceGetName(handle),
                                 "memory_size_bytes" : mem.total,
                                 "stats" : { "gpu_proc_utilization_ratio" : util.gpu,
@@ -73,7 +77,7 @@ def get_disk_info():
     return {"stats" : { "disk_total_size" : total,
                         "disk_used_size" : used,
                         "disk_free_size" : free,
-                        "disk_usage_ratio" : used/total}}
+                        "disk_usage_ratio" : 1-free/total}}
 
 def main() -> None:
     ap = argparse.ArgumentParser()
@@ -82,7 +86,11 @@ def main() -> None:
     args = vars(ap.parse_args())
 
     if args["config"] is not None:
-        raise NotImplementedError()
+        import yaml
+        with open(args["config"]) as f:
+            conf = yaml.load(f, Loader=yaml.CLoader)
+            conf.update(args)
+            args = conf
 
     system_state_topic = b'system_stats'
     pub_period_sec = 1.0

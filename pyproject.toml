@@ -27,6 +27,6 @@ dependencies = [
 
 [project.scripts]
 wsmon-publisher = "ws_monitor.publisher:main"
-wsmon-webpage = "ws_monitor.publisher:web_page"
+wsmon-webpage = "ws_monitor.web_page:web_page"
 [tool.setuptools]
 script-files = ["src/ws_monitor/wsmon_run_flask.sh"]

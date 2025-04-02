@@ -53,10 +53,10 @@ class Subscriber():
                     data = self.all_data[sys]
                     age = time.time()-data['last_contact']
                     gpus = data["gpu"]
-                    top_vram_users = ""
+                    top_vram_users_str = ""
                     for gpu in gpus.values():
                         top_vram_user = max(gpu["memratio_by_user"].items(), key=lambda user_ratio: user_ratio[1]) if len(gpu["memratio_by_user"])>0 else ("None",0.0)
-                        top_vram_users += top_vram_user[0]+f" {top_vram_user[1]*100:.1f}%"
+                        top_vram_users_str += top_vram_user[0]+f" {top_vram_user[1]*100:.1f}%"
                     cpu_stats = data["cpu"]
                     disk = data.get("disk",None)
                     if disk is not None:
@@ -65,15 +65,29 @@ class Subscriber():
                         disk_str = "N/A"
                     top_mem_user = max(cpu_stats["memratio_by_user"].items(), key=lambda user_ratio: user_ratio[1])
                     top_mem_user_str = top_mem_user[0]+f" {top_mem_user[1]*100:.1f}%"
-                    lines.append(    ([f"{data['hostname']}[{age:.1f}s]",
-                                        f" CPU:{cpu_stats['cpu_utilization_ratio']*100:.2f}% ",
-                                        f" RAM:{cpu_stats['cpu_mem_fill_ratio']*100:.2f}% ",
-                                        f" GPU:"+str([f"{gpu['stats']['gpu_proc_utilization_ratio']:.2f}%" for gpu in gpus.values()]),
-                                        f" VRAM:"+str([f"{gpu['stats']['gpu_mem_fill_ratio']*100:.2f}%" for gpu in gpus.values()]),
-                                        f" disk:{disk_str}",
-                                        f" top_mem_user:"+str(top_mem_user_str),
-                                        f" top_vram_users:"+str(top_vram_users),
-                                        f" active_users:"+str(self.get_active_users(data))], age, False))
+
+                    all_stats = {"cpu_ut" : f"{cpu_stats['cpu_utilization_ratio']*100:.2f}%",
+                                 "ram_ut" : f"{cpu_stats['cpu_mem_fill_ratio']*100:.2f}%",
+                                 "gpus_ut" : str([f"{gpu['stats']['gpu_proc_utilization_ratio']:.2f}%" for gpu in gpus.values()]),
+                                 "vrams_ut" : str([f"{gpu['stats']['gpu_mem_fill_ratio']*100:.2f}%" for gpu in gpus.values()]),
+                                 "disk_ut" : disk_str,
+                                 "top_mem_user" : top_mem_user_str,
+                                 "top_vram_users" : top_vram_users_str,
+                                 "active_users" : str(self.get_active_users(data))}
+                    if age > 300:
+                        all_stats = {k:"???" for k in all_stats}
+
+                    lines.append( ([f"{data['hostname']}[{age:.1f}s]",
+                                    f" CPU:{all_stats['cpu_ut']} ",
+                                    f" RAM:{all_stats['ram_ut']} ",
+                                    f" GPU:{all_stats['gpus_ut']}",
+                                    f" VRAM:{all_stats['vrams_ut']}",
+                                    f" disk:{all_stats['disk_ut']}",
+                                    f" top_mem_user:{all_stats['top_mem_user']}",
+                                    f" top_vram_users:{all_stats['top_vram_users']}",
+                                    f" active_users:{all_stats['active_users']}"], 
+                                    age, 
+                                    False))
                 except Exception as e:
                     try:
                         data = self.all_data[sys]

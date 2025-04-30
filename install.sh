@@ -16,12 +16,11 @@ echo "Created venv at $(which python3)"
 pip install --upgrade pip
 pip install --upgrade setuptools
 pip install --upgrade wheel
-
-pip install -r "${dname}/requirements.txt"
+# pip install -r "${dname}/requirements.txt"
 pip install .
 
 echo ""
-echo "What will be the server address? (default: 'localhost:9452')"
+echo "What is the server address? (default: 'localhost:9452')"
 read -p "> " -r server_address
 if [[ -z "$server_address" ]]; then
     server_address="localhost:9452"

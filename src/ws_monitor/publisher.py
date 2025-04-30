@@ -90,7 +90,7 @@ def main() -> None:
         import yaml
         with open(args["config"]) as f:
             conf = yaml.load(f, Loader=yaml.CLoader)
-            conf.update({k:v for k,v in args if v is not None})
+            conf.update({k:v for k,v in args.items() if v is not None})
             args = conf
     if args["server"] is None:
         args["server"] = "tcp://127.0.0.1:9452"

@@ -5,3 +5,4 @@ virtualenv/*
 .vscode*
 __pycache__/*
 build/*
+config/*

@@ -9,6 +9,7 @@ import socket
 import psutil
 import subprocess
 import shutil
+from pprint import pprint
 
 pynvml.nvmlInit()
 def get_gpus_infos():
@@ -92,6 +93,9 @@ def main() -> None:
             conf.update(args)
             args = conf
 
+    pprint(f"Publisher config:")
+    pprint(args)
+
     system_state_topic = b'system_stats'
     pub_period_sec = 1.0
     ctx = zmq.Context()
@@ -104,6 +108,7 @@ def main() -> None:
 
     while True:
         try:
+            t0 = time.monotonic()
             data = {}
             data["hostname"] = socket.gethostname()
             data["gpu"] = get_gpus_infos()
@@ -113,7 +118,12 @@ def main() -> None:
             msg = json.dumps(data)
             s.send_multipart([system_state_topic, msg.encode("utf8")])
             # short wait so we don't hog the cpu
-            time.sleep(pub_period_sec)
+            tf = time.monotonic()
+            sleep_duration = pub_period_sec-(tf-t0)
+            if sleep_duration > 0:
+                time.sleep(sleep_duration)
+            else:
+                print(f"Warning: publisher is too slow took {tf-t0:.3f}s)")
         except KeyboardInterrupt:
             print(f"Received SIGINT")
             break

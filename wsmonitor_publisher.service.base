@@ -1,0 +1,14 @@
+[Unit]
+Description=WSMon Publisher Service
+After=network.target
+
+[Service]
+Type=simple
+User=crizz
+WorkingDirectory=/home/crizz/ws_monitor
+ExecStart=PACKAGE_FOLDER/launch_publisher_venv.sh PACKAGE_FOLDER/virtualenv PACKAGE_FOLDER/config/publisher_config.yaml
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

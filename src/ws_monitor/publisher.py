@@ -82,7 +82,7 @@ def get_disk_info():
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--server", default="tcp://127.0.0.1:9452", type=str, help="Address of the aggregator server.")
+    ap.add_argument("--server", default=None, type=str, help="Address of the aggregator server.")
     ap.add_argument("--config", default=None, type=str, help="Config file to loadConfig file to load")
     args = vars(ap.parse_args())
 
@@ -90,8 +90,10 @@ def main() -> None:
         import yaml
         with open(args["config"]) as f:
             conf = yaml.load(f, Loader=yaml.CLoader)
-            conf.update(args)
+            conf.update({k:v for k,v in args if v is not None})
             args = conf
+    if args["server"] is None:
+        args["server"] = "tcp://127.0.0.1:9452"
 
     pprint(f"Publisher config:")
     pprint(args)

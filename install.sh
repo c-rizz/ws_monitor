@@ -26,12 +26,20 @@ read -p "> " -r server_address
 if [[ -z "$server_address" ]]; then
     server_address="localhost:9452"
 fi
-sed -e "s#localhost:9452#$server_address#g" default_pub_config.yaml > config/publisher_config.yaml
 
 mkdir -p config
+sed -e "s#localhost:9452#$server_address#g" default_pub_config.yaml > config/publisher_config.yaml
+if [[ ! -f config/publisher_config.yaml ]]; then
+    echo "Error: Failed to create config/publisher_config.yaml"
+    exit 1
+fi
 sed -e "s#PACKAGE_FOLDER#$dname#g" wsmonitor_publisher.service.base > config/wsmonitor_publisher.service
+if [[ ! -f config/wsmonitor_publisher.yaml ]]; then
+    echo "Error: Failed to create config/publisher_config.yaml"
+    exit 1
+fi
 
-echo "Do you want to start the publisher at startup? (y/n)"
+echo "Do you want to start the publisher at startup? (y/N)"
 read -p "> " -r start_at_boot
 if [[ "$start_at_boot" == "y" || "$start_at_boot" == "Y" ]]; then
     sudo cp config/wsmonitor_publisher.service /etc/systemd/system/

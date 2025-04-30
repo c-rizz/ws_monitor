@@ -37,6 +37,6 @@ wsmon_run_flask.sh
 ```
 git clone https://github.com/c-rizz/ws_monitor
 cd ws_monitor
-./install # this requires sudo rights, but you may be able to also run things manually without it
+./install.sh # this requires sudo rights, but you may be able to also run things manually without it
 ```
 

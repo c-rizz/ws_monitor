@@ -34,8 +34,8 @@ if [[ ! -f config/publisher_config.yaml ]]; then
     exit 1
 fi
 sed -e "s#PACKAGE_FOLDER#$dname#g" wsmonitor_publisher.service.base > config/wsmonitor_publisher.service
-if [[ ! -f config/wsmonitor_publisher.yaml ]]; then
-    echo "Error: Failed to create config/publisher_config.yaml"
+if [[ ! -f config/wsmonitor_publisher.service ]]; then
+    echo "Error: Failed to create config/wsmonitor_publisher.service"
     exit 1
 fi
 

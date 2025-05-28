@@ -37,6 +37,11 @@ if [[ ! -f config/wsmonitor_publisher.service ]]; then
     echo "Error: Failed to create config/wsmonitor_publisher.service"
     exit 1
 fi
+sed -e "s#USER#$USER#g" wsmonitor_publisher.service.base > config/wsmonitor_publisher.service
+if [[ ! -f config/wsmonitor_publisher.service ]]; then
+    echo "Error: Failed to create config/wsmonitor_publisher.service"
+    exit 1
+fi
 
 echo "Do you want to start the publisher at startup? (y/N)"
 read -p "> " -r start_at_boot

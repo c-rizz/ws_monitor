@@ -6,3 +6,4 @@ virtualenv/*
 __pycache__/*
 build/*
 config/*
+data/*

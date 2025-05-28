@@ -125,7 +125,7 @@ def main() -> None:
             if sleep_duration > 0:
                 time.sleep(sleep_duration)
             else:
-                print(f"Warning: publisher is too slow took {tf-t0:.3f}s)")
+                print(f"Warning: publisher is too slow, took {tf-t0:.3f}s)")
         except KeyboardInterrupt:
             print(f"Received SIGINT")
             break

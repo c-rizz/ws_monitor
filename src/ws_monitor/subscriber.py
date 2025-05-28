@@ -79,9 +79,9 @@ class WorkstationStatus:
         return list(active_users)
     
     def activity_ratio(self):
-        if self.activity_len == 0:
+        if self._monitored_secs == 0:
             return 0.0
-        return self.activity_seconds / self.activity_len
+        return self._active_secs / self._monitored_secs
     
 
 class Subscriber():

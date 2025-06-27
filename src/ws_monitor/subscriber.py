@@ -137,6 +137,40 @@ class UsageStats:
             img[i+r-1] = np.array(border)  # gray
         return img
     
+
+    def get_week_users_image(self):
+        dt = datetime.datetime.now()
+        light_gray = np.array([240, 235, 245])
+        red = np.array([17, 17, 240])
+        green = np.array([56, 235, 56])
+        border_gray = np.array([189, 172, 164])
+        row_height = 20
+        
+        weekstart_dt = datetime.datetime.combine(dt.date()-datetime.timedelta(days=6), datetime.datetime.min.time())
+        weekstart_idx = self.get_datetime_idx(weekstart_dt)
+        weekend_idx = weekstart_idx+7*24*60
+        week_monitored = self._yearly_minute_monitored[weekstart_idx:weekend_idx]
+        week_users = self._yearly_minute_active_users[weekstart_idx:weekend_idx]
+
+        img_mon = np.full(fill_value=255,shape=week_monitored.shape+(3,), dtype=np.uint8)
+        img_mon[np.logical_not(week_monitored)] = light_gray
+
+        user_images : dict[str,np.ndarray]= {}
+        for uname,uid in self._users.items():
+            print(f"{uname} : {uid}")
+            week_user_active = np.bitwise_and(week_users, 1<<uid) != 0
+            img_user = img_mon.copy()
+            img_user[week_user_active] = red
+            img_user[np.logical_not(week_user_active)] = green
+            img_user = img_user.reshape(7,24*60,3)
+            img_user = np.repeat(img_user, repeats=row_height, axis=0)
+            for i in range(0,img_user.shape[0],row_height):
+                img_user[i] = border_gray
+                img_user[i+row_height-1] = border_gray
+            user_images[uname] = img_user
+
+        return user_images
+    
     def get_week_recap(self):
         dt = datetime.datetime.now()
         # time_from_year_start = t-datetime.datetime.fromisoformat(f"{dt.year}-01-01").timestamp()
@@ -159,7 +193,7 @@ class UsageStats:
             active_ratio = active_minutes/monitored_minutes if monitored_minutes>0 else float("nan")
             minutes_by_user = {}
             for name,idx in self._users.items():
-                minutes_by_user[name] = np.count_nonzero(np.logical_and(day_users, 1<<idx))
+                minutes_by_user[name] = np.count_nonzero(np.bitwise_and(day_users, 1<<idx))
             minutes_by_user_ratio = {n:m/monitored_minutes if monitored_minutes>0 else float("nan") for n,m in minutes_by_user.items()}
             daystr =  f"{(weekstart_dt + datetime.timedelta(days=day)).date()}: activity {active_ratio*100:2.0f}% monitored {monitored_ratio*100:2.0f}%\n"
             daystr += f"            "+(",".join(f"{n}:{r*100:2.0f}%" for n,r in minutes_by_user_ratio.items()))
@@ -253,11 +287,8 @@ class WorkstationStatus:
             return 0.0
         return self._active_secs / self._monitored_secs
     
-    def get_week_image(self):
-        return self._usage_stats.get_week_image()
-
-    def get_week_recap(self):
-        return self._usage_stats.get_week_recap()
+    def get_usage_stats(self):
+        return self._usage_stats
     
 
 class Subscriber():
@@ -320,8 +351,9 @@ class Subscriber():
                                  "active_users" : str(ws_status.active_users)}
                     if age > 300:
                         all_stats = {k:"???" for k in all_stats}
-
-                    lines.append( ([f"{data['hostname']}[{age:.1f}s]",
+                    hostname = data['hostname']
+                    hlink = f'<a href="/{hostname}">#</a>'
+                    lines.append( ([f"{hostname}[{age:.1f}s]",
                                     f" CPU:{all_stats['cpu_ut']} ",
                                     f" RAM:{all_stats['ram_ut']} ",
                                     f" GPU:{all_stats['gpus_ut']}",
@@ -334,33 +366,34 @@ class Subscriber():
                                     # f" hourly:{ws_status.activity_seconds/ws_status.activity_len*100:.1f}%"
                                     ],
                                     age, 
-                                    False))
+                                    False,
+                                    hlink))
                 except Exception as e:
                     try:
                         age = time.time()-ws_status.last_contact
                     except Exception:
                         age = None
-                    lines.append((f"{data['hostname']}: ERROR interpreting data. {e}\n", age, True))
+                    lines.append((f"{data['hostname']}: ERROR interpreting data. {e}\n", age, True, "#"))
             
             if len(lines)>0:
                 cols = 0
-                for line, age, raw in lines:
+                for line, age, raw, hlink in lines:
                     if isinstance(line, list):
                         cols = len(line)
                 widths = [1]*cols
-                for line, age, raw in lines:
+                for line, age, raw, hlink in lines:
                     if not raw:
                         for i,col in enumerate(line):
                             widths[i] = max(widths[i], len(col)+1)
-                for line, age, raw in lines:
+                for line, age, raw, hlink in lines:
                     if not raw:
                         for i in range(len(line)):
                             line[i] = line[i].ljust(widths[i])
-                for line, age, raw in lines:
+                for line, age, raw, hlink in lines:
                     if raw:
                         line_str = line
                     else:
-                        line_str = "".join(line)+"\n"
+                        line_str = hlink+" "+("".join(line)+"\n")
                     #if age > 60:
                     #    line_str = strike(line_str)
                     s+= line_str
@@ -369,15 +402,22 @@ class Subscriber():
 
     def get_activity_img(self, ws_name):
         if ws_name in self.stats:
-            return self.stats[ws_name].get_week_image()
+            return self.stats[ws_name].get_usage_stats().get_week_image()
         else:
             return None
         
     def get_activity_text(self, ws_name):
         if ws_name in self.stats:
-            return self.stats[ws_name].get_week_recap()
+            return self.stats[ws_name].get_usage_stats().get_week_recap()
         else:
             return None
+        
+    def get_user_activity_images(self, ws_name):
+        if ws_name in self.stats:
+            return self.stats[ws_name].get_usage_stats().get_week_users_image()
+        else:
+            return None
+
 
     def receiver_worker(self, bind_to : str):
         system_state_topic = b'system_stats'

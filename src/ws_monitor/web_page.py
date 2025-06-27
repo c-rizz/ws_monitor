@@ -3,6 +3,7 @@ from flask import Flask, render_template, redirect, request, url_for, Response
 # import flask_login
 import cv2
 import numpy as np
+import base64
 
 from ws_monitor.subscriber import Subscriber
 
@@ -43,12 +44,45 @@ def ws_weekimage_page(wsname):
   return Response(data,
                   mimetype='image/png')
 
+def get_page_foot():
+  links = [f'<a href="/{wsname}">{wsname}</a>' for wsname in subscriber.get_ws_names()]
+  return f"""
+<br>
+{'<br> '.join(links)}
+<br>
+<br>
+<a href="/">Home</a>"""
+
+@app.route("/<wsname>/users")
+def ws_weekuserimage_page(wsname):
+  imgs : dict[str,np.ndarray] | None = subscriber.get_user_activity_images(wsname)
+  if imgs is None:
+    return f"{wsname} not found"
+  
+  html_imgs = ""
+  for username, img in imgs.items():
+      success, encoded = cv2.imencode('.png', img)
+      if not success:
+          html_imgs += f"<div><h3>{username}</h3> Error generating image. </div><br>"
+          continue
+      b64_data = base64.b64encode(encoded.tobytes()).decode('utf-8')
+      img_tag = f'<img src="data:image/png;base64,{b64_data}" style="max-height:200px;">'
+      html_imgs += f"<div><h3>{username}</h3>{img_tag}</div><br>"
+
+  return f"""
+  <html>
+  <head><title>{wsname} User Activity Images</title></head>
+  <body>
+      <h1>Images for {wsname}</h1>
+      {html_imgs}
+      {get_page_foot()}
+  </body>
+  </html>
+  """
+
 
 @app.route("/<wsname>")
 def ws_details_page(wsname):
-  links = [f'<a href="/{wsname}">{wsname}</a>' for wsname in subscriber.get_ws_names()]
-  links = "<br>\n".join(links)
-
   weekly_recap = subscriber.get_activity_text(wsname)
   if weekly_recap is None:
     weekly_recap = f"{wsname} not found"
@@ -71,11 +105,9 @@ def ws_details_page(wsname):
     <pre>
     {weekly_recap}
     </pre>
+    <a href="/{wsname}/users"> Users activity detail </a>
     <br>
-    {links}
-    <br>
-    <br>
-    <a href="/">Home</a>
+    {get_page_foot()}
   </body>
 </html>'''
 

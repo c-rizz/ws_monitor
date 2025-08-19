@@ -278,7 +278,7 @@ class WorkstationStatus:
                     active_users.add(user)
         cpu_stats = self.data["cpu"]
         for user, ram_ratio in cpu_stats["memratio_by_user"].items():
-            if ram_ratio > 0.3:
+            if ram_ratio > 0.3 and ram_ratio < cpu_stats["cpu_mem_fill_ratio"]: # there's some bug in the user ram_ratio, exclude it if it doesn't make sense
                 active_users.add(user)
         return list(active_users)
     

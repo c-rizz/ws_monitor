@@ -15,7 +15,7 @@ from ws_monitor.subscriber import Subscriber
 app = Flask(__name__)
 app.secret_key = 'ihavenoideawhatthisis-yetanothertime  bahbehboh'
 
-@app.route('/')
+@app.route('/index_old')
 def index():
    newline  = "\n"
    return f'''
@@ -34,6 +34,16 @@ def index():
 </html>'''
 
 
+@app.route("/")
+def index2():
+    # This will render templates/index.html
+    return render_template("index.html")
+
+@app.route("/global_stats")
+def global_stats():
+    # Replace with your subscriber.get_stats_recap(wsname)
+    stats = subscriber.get_stats_recap()
+    return Response(stats, mimetype="text/plain")
 
 @app.route("/<wsname>/weekimage")
 def ws_weekimage_page(wsname):

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Workstation Stats</title>
+  <script>
+    async function refreshStats() {
+      try {
+        let response = await fetch("/global_stats");
+        if (!response.ok) {
+          throw new Error("Network response was not ok");
+        }
+        let text = await response.text();
+        document.getElementById("stats-pre").innerHTML = text;
+      } catch (err) {
+        console.error("Error fetching stats:", err);
+      }
+    }
+
+    // Refresh periodically
+    setInterval(refreshStats, 1000);
+
+    // Run once immediately on page load
+    window.onload = refreshStats;
+  </script>
+</head>
+<body>
+  <h1>Workstation Stats</h1>
+  <pre id="stats-pre">Loading...</pre>
+  <div id="stats-pre" style="white-space: pre; font-family: monospace;"></div>
+</body>
+</html>

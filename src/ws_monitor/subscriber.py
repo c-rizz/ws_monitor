@@ -104,12 +104,9 @@ class UsageStats:
             print(f"could not open file {self._filepath}, will be created")
             pass
 
-    def get_week_image(self):
-        dt = datetime.datetime.now()
-        # time_from_year_start = t-datetime.datetime.fromisoformat(f"{dt.year}-01-01").timestamp()
-        # minute_from_year_start = int(time_from_year_start/60)
-        
-        weekstart_dt = datetime.datetime.combine(dt.date()-datetime.timedelta(days=6), datetime.datetime.min.time())
+    def get_week_image(self, start_date : datetime.date):
+        # print(f"Generating week image for {self._wsname} starting at {start_date}")
+        weekstart_dt = datetime.datetime.combine(start_date, datetime.datetime.min.time())
         weekstart_idx = self.get_datetime_idx(weekstart_dt)
         weekend_idx = weekstart_idx+7*24*60
         week_activity   = self._yearly_minute_activity[weekstart_idx:weekend_idx]
@@ -138,7 +135,7 @@ class UsageStats:
         return img
     
 
-    def get_week_users_image(self):
+    def get_week_users_images(self):
         dt = datetime.datetime.now()
         light_gray = np.array([240, 235, 245])
         red = np.array([17, 17, 240])
@@ -400,9 +397,11 @@ class Subscriber():
             
             return s
 
-    def get_activity_img(self, ws_name):
+    def get_activity_img(self, ws_name, date : datetime.date | None = None):
         if ws_name in self.stats:
-            return self.stats[ws_name].get_usage_stats().get_week_image()
+            if date is None:
+                date = datetime.datetime.now().date()-datetime.timedelta(days=6) # default to last 7 days
+            return self.stats[ws_name].get_usage_stats().get_week_image(date)
         else:
             return None
         
@@ -414,7 +413,7 @@ class Subscriber():
         
     def get_user_activity_images(self, ws_name):
         if ws_name in self.stats:
-            return self.stats[ws_name].get_usage_stats().get_week_users_image()
+            return self.stats[ws_name].get_usage_stats().get_week_users_images()
         else:
             return None
 

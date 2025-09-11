@@ -4,6 +4,7 @@ from flask import Flask, render_template, redirect, request, url_for, Response
 import cv2
 import numpy as np
 import base64
+from datetime import datetime
 
 from ws_monitor.subscriber import Subscriber
 
@@ -44,6 +45,15 @@ def global_stats():
     # Replace with your subscriber.get_stats_recap(wsname)
     stats = subscriber.get_stats_recap()
     return Response(stats, mimetype="text/plain")
+
+@app.route("/<wsname>/weekimage_history_<date_yyyymmdd>")
+def ws_weekimage_history_page(wsname, date_yyyymmdd):
+  img = subscriber.get_activity_img(wsname, date = datetime.strptime(date_yyyymmdd, "%Y%m%d").date())
+  if img is None:
+    return f"{wsname} not found"
+  data = np.array(cv2.imencode('.png', img)[1]).tobytes()
+  return Response(data,
+                  mimetype='image/png')
 
 @app.route("/<wsname>/weekimage")
 def ws_weekimage_page(wsname):

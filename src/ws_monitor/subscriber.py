@@ -349,8 +349,9 @@ class Subscriber():
                     if age > 300:
                         all_stats = {k:"???" for k in all_stats}
                     hostname = data['hostname']
-                    hlink = f'<a href="/{hostname}">#</a>'
-                    lines.append( ([f"{hostname}[{age:.1f}s]",
+                    hlink = f"{hostname}"
+                    lines.append( ([f"{hostname}",
+                                    f"[{age:.1f}s]",
                                     f" CPU:{all_stats['cpu_ut']} ",
                                     f" RAM:{all_stats['ram_ut']} ",
                                     f" GPU:{all_stats['gpus_ut']}",
@@ -390,7 +391,10 @@ class Subscriber():
                     if raw:
                         line_str = line
                     else:
-                        line_str = hlink+" "+("".join(line)+"\n")
+                        l0_length = len(line[0])
+                        l0_strip = line[0].strip()
+                        line[0] = f'<a href="/{l0_strip}">{l0_strip}</a>'+" "*(l0_length-len(l0_strip))
+                        line_str = ("".join(line)+"\n")
                     #if age > 60:
                     #    line_str = strike(line_str)
                     s+= line_str

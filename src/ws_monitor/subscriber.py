@@ -192,8 +192,8 @@ class UsageStats:
             for name,idx in self._users.items():
                 minutes_by_user[name] = np.count_nonzero(np.bitwise_and(day_users, 1<<idx))
             minutes_by_user_ratio = {n:m/monitored_minutes if monitored_minutes>0 else float("nan") for n,m in minutes_by_user.items()}
-            daystr =  f"{(weekstart_dt + datetime.timedelta(days=day)).date()}: activity {active_ratio*100:2.0f}% monitored {monitored_ratio*100:2.0f}%\n"
-            daystr += f"            "+(",".join(f"{n}:{r*100:2.0f}%" for n,r in minutes_by_user_ratio.items()))
+            daystr =  f"{(weekstart_dt + datetime.timedelta(days=day)).date()}: active {active_ratio*100: 4.0f}% monitored {monitored_ratio*100: 4.0f}% \t"
+            daystr += f"            "+(", ".join(f"{n}:{r*100: 4.0f}%" for n,r in minutes_by_user_ratio.items()))
             ret_strs.append(daystr)
         
         return "\n".join(ret_strs)

@@ -88,7 +88,7 @@ def get_ip(target_host: str = "10.254.254.254"):
         s.connect((target_host, 1))
         ip = s.getsockname()[0]
     except Exception:
-        ip = '127.0.0.1'
+        ip = 'N/A'
     finally:
         s.close()
     return ip

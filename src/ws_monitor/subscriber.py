@@ -197,7 +197,20 @@ class UsageStats:
             ret_strs.append(daystr)
         
         return "\n".join(ret_strs)
-        
+
+    def get_usage_ratio(self, start_datetime : datetime.datetime, end_datetime : datetime.datetime):
+        start_idx = max(self.get_datetime_idx(start_datetime),0)
+        end_idx = min(self.get_datetime_idx(end_datetime), self._yearly_minute_activity.shape[0])
+        if start_idx >= end_idx:
+            return float("nan")
+        # print(f"Calculating usage ratio from {start_datetime} (idx {start_idx}) to {end_datetime} (idx {end_idx})")
+        activity   = self._yearly_minute_activity[start_idx:end_idx]
+        monitored = self._yearly_minute_monitored[start_idx:end_idx]
+        active_monitored = np.logical_and(activity, monitored)
+        monitored_minutes = np.count_nonzero(monitored)
+        active_monitored_minutes = np.count_nonzero(active_monitored)
+        active_ratio = active_monitored_minutes/monitored_minutes if monitored_minutes>0 else float("nan")
+        return active_ratio
 
 
 
@@ -284,6 +297,18 @@ class WorkstationStatus:
             return 0.0
         return self._active_secs / self._monitored_secs
     
+    def daily_activity_ratio(self):
+        return self._usage_stats.get_usage_ratio(
+            start_datetime = datetime.datetime.now()-datetime.timedelta(days=1),
+            end_datetime = datetime.datetime.now()
+        )
+    
+    def weekly_activity_ratio(self):
+        return self._usage_stats.get_usage_ratio(
+            start_datetime = datetime.datetime.now()-datetime.timedelta(weeks=1),
+            end_datetime = datetime.datetime.now()
+        )
+    
     def get_usage_stats(self):
         return self._usage_stats
     
@@ -349,9 +374,11 @@ class Subscriber():
                     if age > 300:
                         all_stats = {k:"???" for k in all_stats}
                     hostname = data['hostname']
+                    ip = data.get('ip', 'N/A')
                     hlink = f"{hostname}"
                     lines.append( ([f"{hostname}",
                                     f"[{age:.1f}s]",
+                                    f" IP:{ip} ",
                                     f" CPU:{all_stats['cpu_ut']} ",
                                     f" RAM:{all_stats['ram_ut']} ",
                                     f" GPU:{all_stats['gpus_ut']}",
@@ -359,7 +386,8 @@ class Subscriber():
                                     f" disk:{all_stats['disk_ut']}",
                                     f" top_mem_user:{all_stats['top_mem_user']}",
                                     f" top_vram_users:{all_stats['top_vram_users']}",
-                                    f" l:{ws_status.activity_ratio()*100:.1f}%", 
+                                    f" dl:{ws_status.daily_activity_ratio()*100:.1f}%", 
+                                    f" wl:{ws_status.weekly_activity_ratio()*100:.1f}%",
                                     f" active_users:{all_stats['active_users']}", 
                                     # f" hourly:{ws_status.activity_seconds/ws_status.activity_len*100:.1f}%"
                                     ],
@@ -414,7 +442,7 @@ class Subscriber():
             return self.stats[ws_name].get_usage_stats().get_week_recap()
         else:
             return None
-        
+    
     def get_user_activity_images(self, ws_name):
         if ws_name in self.stats:
             return self.stats[ws_name].get_usage_stats().get_week_users_images()

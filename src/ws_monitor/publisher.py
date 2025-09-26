@@ -80,6 +80,21 @@ def get_disk_info():
                         "disk_free_size" : free,
                         "disk_usage_ratio" : 1-free/total}}
 
+def get_ip(target_host: str = "10.254.254.254"):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0)
+    try:
+        # doesn't even have to be reachable
+        s.connect((target_host, 1))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return ip
+
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--server", default=None, type=str, help="Address of the aggregator server.")
@@ -113,6 +128,7 @@ def main() -> None:
             t0 = time.monotonic()
             data = {}
             data["hostname"] = socket.gethostname()
+            data["ip"] = get_ip(args["server"])
             data["gpu"] = get_gpus_infos()
             data["cpu"] = get_cpu_infos()
             data["disk"] = get_disk_info()

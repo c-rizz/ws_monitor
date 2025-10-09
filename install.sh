@@ -37,7 +37,7 @@ if [[ ! -f config/wsmonitor_publisher.service ]]; then
     echo "Error: Failed to create config/wsmonitor_publisher.service"
     exit 1
 fi
-sed -e "s#USER#$USER#g" wsmonitor_publisher.service.base > config/wsmonitor_publisher.service
+sed -i -e "s#USER#$USER#g" config/wsmonitor_publisher.service
 if [[ ! -f config/wsmonitor_publisher.service ]]; then
     echo "Error: Failed to create config/wsmonitor_publisher.service"
     exit 1

@@ -17,6 +17,14 @@ def strike(text):
         result = result + c + '\u0336'
     return result
 
+bright_green = np.array([56, 235, 56])
+pastel_green = np.array((89, 220, 111))
+bright_red   = np.array([17, 17, 240])
+punch_red     = np.array((42, 42, 218))
+light_gray   = np.array([240, 235, 245])
+dark_gray    = np.array([189, 172, 164])
+almost_white = np.array([230, 226, 225])
+
 class UsageStats:
     def __init__(self, filepath : str, wsname : str):
         # self._weekly_minute_activity = np.zeros(60*24*7, dtype = np.bool8) # For each minute a flag for when the computer was active
@@ -120,27 +128,22 @@ class UsageStats:
         # print(f"week monitored minutes = {np.count_nonzero(week_activity)}")
         img = np.ones(shape=week_activity.shape+(3,), dtype=np.uint8)
         img *= 255
-        img[week_activity]     = np.array([17, 17, 240]) # red
-        img[np.logical_not(week_activity)] = np.array([56, 235, 56])  # green
-        img[np.logical_not(week_monitoring)] = np.array([230, 226, 225])  # almost white
+        img[week_activity]     = punch_red
+        img[np.logical_not(week_activity)] = pastel_green
+        img[np.logical_not(week_monitoring)] = almost_white
 
         img = img.reshape(7,24*60,3)
         r  = 40
         img = np.repeat(img, repeats=r, axis=0)
         # img = np.tile(img, r).reshape(r*7,24*60,3)
         for i in range(0,img.shape[0],r):
-            border = [189, 172, 164]
-            img[i] = np.array(border)  # gray
-            img[i+r-1] = np.array(border)  # gray
+            img[i] = dark_gray
+            img[i+r-1] = dark_gray
         return img
     
 
     def get_week_users_images(self):
         dt = datetime.datetime.now()
-        light_gray = np.array([240, 235, 245])
-        red = np.array([17, 17, 240])
-        green = np.array([56, 235, 56])
-        border_gray = np.array([189, 172, 164])
         row_height = 20
         
         weekstart_dt = datetime.datetime.combine(dt.date()-datetime.timedelta(days=6), datetime.datetime.min.time())
@@ -157,13 +160,13 @@ class UsageStats:
             print(f"{uname} : {uid}")
             week_user_active = np.bitwise_and(week_users, 1<<uid) != 0
             img_user = img_mon.copy()
-            img_user[week_user_active] = red
-            img_user[np.logical_not(week_user_active)] = green
+            img_user[week_user_active] = punch_red
+            img_user[np.logical_not(week_user_active)] = pastel_green
             img_user = img_user.reshape(7,24*60,3)
             img_user = np.repeat(img_user, repeats=row_height, axis=0)
             for i in range(0,img_user.shape[0],row_height):
-                img_user[i] = border_gray
-                img_user[i+row_height-1] = border_gray
+                img_user[i] = dark_gray
+                img_user[i+row_height-1] = dark_gray
             user_images[uname] = img_user
 
         return user_images
@@ -370,14 +373,22 @@ class Subscriber():
                                  "disk_ut" : disk_str,
                                  "top_mem_user" : top_mem_user_str,
                                  "top_vram_users" : top_vram_users_str,
-                                 "active_users" : str(ws_status.active_users)}
+                                 "active_users" : ws_status.active_users}
                     if age > 300:
                         all_stats = {k:"???" for k in all_stats}
                     hostname = data['hostname']
                     ip = data.get('ip', 'N/A')
                     hlink = f"{hostname}"
+                    active_users = all_stats['active_users']
+                    if age > 120:
+                        status = "🟨"
+                    elif len(active_users)>0:
+                        status = "🟥"
+                    else:
+                        status = "🟩"
                     lines.append( ([f"{hostname}",
                                     f"[{age:.1f}s]",
+                                    f" {status}",
                                     f" IP:{ip} ",
                                     f" CPU:{all_stats['cpu_ut']} ",
                                     f" RAM:{all_stats['ram_ut']} ",

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <title>Workstation Stats</title>
   <script>
     async function refreshStats() {
@@ -25,6 +26,11 @@
 </head>
 <body>
   <h1>Workstation Stats</h1>
+  Please, <strong>DO NOT START NEW TASKS ON A WORKSTATION IF IT IS ALREADY IN USE</strong> by someone else!<br>
+  Starting a new task may interrupt the work of another user.<br>
+  If you need to use a workstation that is already in use, please <strong>CONTACT THE USER FIRST</strong>.<br>
+  <br>
+
   <pre id="stats-pre">Loading...</pre>
   <div id="stats-pre" style="white-space: pre; font-family: monospace;"></div>
 </body>

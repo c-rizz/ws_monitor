@@ -85,7 +85,7 @@ def get_ip(target_host: str = "10.254.254.254"):
     s.settimeout(0)
     try:
         # doesn't even have to be reachable
-        s.connect((target_host, 1))
+        s.connect((target_host.split(":")[0], 1))
         ip = s.getsockname()[0]
     except Exception:
         ip = 'N/A'

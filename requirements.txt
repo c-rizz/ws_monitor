@@ -3,3 +3,4 @@ pyzmq==26.2.0
 psutil
 pyyaml==6.0.2
 numpy==2.2.6
+gunicorn

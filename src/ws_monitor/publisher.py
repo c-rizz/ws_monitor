@@ -87,7 +87,8 @@ def get_ip(target_host: str = "10.254.254.254"):
         # doesn't even have to be reachable
         s.connect((target_host.split(":")[0], 1))
         ip = s.getsockname()[0]
-    except Exception:
+    except Exception as e:
+        print(f"Error getting IP address: {type(e)}: {e}")
         ip = 'N/A'
     finally:
         s.close()
@@ -128,7 +129,7 @@ def main() -> None:
             t0 = time.monotonic()
             data = {}
             data["hostname"] = socket.gethostname()
-            data["ip"] = get_ip(args["server"])
+            data["ip"] = get_ip()
             data["gpu"] = get_gpus_infos()
             data["cpu"] = get_cpu_infos()
             data["disk"] = get_disk_info()

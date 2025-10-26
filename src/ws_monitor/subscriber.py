@@ -257,6 +257,11 @@ class WorkstationStatus:
         self.data = data
         self.last_contact = time.time()
         self.active_users = self.get_active_users()
+        if not hasattr(self, 'active_users_in_last_minute'):
+            self.active_users_in_last_minute_times = {}
+        self.active_users_in_last_minute_times = {k:v for k,v in self.active_users_in_last_minute_times.items() if time.monotonic()-v < 60}
+        self.active_users_in_last_minute_times.update({u:time.monotonic() for u in self.active_users})
+        self.active_users_in_last_minute = list(self.active_users_in_last_minute_times.keys())
         self._update_activity()
         self._save_stats()
 
@@ -373,7 +378,7 @@ class Subscriber():
                                  "disk_ut" : disk_str,
                                  "top_mem_user" : top_mem_user_str,
                                  "top_vram_users" : top_vram_users_str,
-                                 "active_users" : ws_status.active_users}
+                                 "active_users" : ws_status.active_users_in_last_minute}
                     if age > 300:
                         all_stats = {k:"???" for k in all_stats}
                     hostname = data['hostname']

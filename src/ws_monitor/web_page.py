@@ -86,11 +86,31 @@ def ws_weekuserimage_page(wsname):
           html_imgs += f"<div><h3>{username}</h3> Error generating image. </div><br>"
           continue
       b64_data = base64.b64encode(encoded.tobytes()).decode('utf-8')
-      img_tag = f'<img src="data:image/png;base64,{b64_data}" style="max-height:200px;">'
-      html_imgs += f"<div><h3>{username}</h3>{img_tag}</div><br>"
+      img_tag = f'<img src="data:image/png;base64,{b64_data}">'
+      svg_url = url_for('static', filename='24h_axis.svg')
+      axis_img_tag = f'<img src="{svg_url}">'
+      html_imgs += f"""
+      <div style="width: 90%;">
+        <h3>{username}</h3>
+        {img_tag}
+        {axis_img_tag}
+      </div>
+      <br>"""
 
   return f"""
   <html>
+  <style>
+  img {{
+    display: block;   /* removes small whitespace under images */
+    margin: 0 auto;   /* centers horizontally */
+    width: 100%;      /* make both responsive */
+    max-width: 900px; /* optional */
+    height: auto;
+  }}
+  h3 {{
+    text-align: center;
+  }}
+  </style>
   <head><title>{wsname} User Activity Images</title></head>
   <body>
       <h1>Images for {wsname}</h1>
@@ -109,11 +129,20 @@ def ws_details_page(wsname):
   weekly_recap = "\n"+weekly_recap
   return f'''
 <html>
+  <style>
+  img {{
+    display: block;   /* removes small whitespace under images */
+    margin: 0 auto;   /* centers horizontally */
+    width: 100%;      /* make both responsive */
+    max-width: 900px; /* optional */
+    height: auto;
+  }}
+  </style>
   <head>
     <title>{wsname}</title>
     <style>
       img {{
-        width: 90%;
+        width: 100%;
       }}
     </style>
   </head>
@@ -122,6 +151,8 @@ def ws_details_page(wsname):
     Weekly activity:
     <br>
     <img src="/{wsname}/weekimage">
+    <img src="/static/24h_axis.svg">
+    <br>
     <pre>
     {weekly_recap}
     </pre>

@@ -236,6 +236,10 @@ class WorkstationStatus:
         self._active_secs = 0
         self._data_folder = data_folder
         self._stats_file = self._data_folder+"/stats.yaml"
+
+        self._last_received_sessionid = float("-inf")
+        self._last_received_seqnum = float("-inf")
+
         os.makedirs(self._data_folder, exist_ok=True)
         try:
             with open(self._stats_file) as f:
@@ -254,6 +258,17 @@ class WorkstationStatus:
         os.replace(self._stats_file+".tmp", self._stats_file)
 
     def update_data(self, data):
+        new_data_sessionid = data.get("session_id", None)
+        new_data_seqnum = data.get("seq_num", None)
+        is_old_session = new_data_sessionid is not None and self._last_received_sessionid is not None and new_data_sessionid < self._last_received_sessionid
+        is_old_seqnum = new_data_seqnum is not None and self._last_received_seqnum is not None and new_data_seqnum <= self._last_received_seqnum
+        if is_old_session or is_old_seqnum:
+            print(f"Ignoring old data for {self.hostname}: session_id {new_data_sessionid} (last {self._last_received_sessionid}), seq_num {new_data_seqnum} (last {self._last_received_seqnum})")            
+            return self
+        self._last_received_sessionid = new_data_sessionid
+        self._last_received_seqnum = new_data_seqnum
+        print(f"Updating data for {self.hostname}: session_id {new_data_sessionid}, seq_num {new_data_seqnum}")
+
         self.data = data
         self.last_contact = time.time()
         self.active_users = self.get_active_users()
@@ -264,6 +279,7 @@ class WorkstationStatus:
         self.active_users_in_last_minute = list(self.active_users_in_last_minute_times.keys())
         self._update_activity()
         self._save_stats()
+        return self
 
     def _update_activity(self):
         active = 1 if len(self.active_users) > 0 else 0
@@ -341,8 +357,7 @@ class Subscriber():
                                            data_folder=self.data_folder+"/"+data["hostname"])
             else:
                 status = self.stats[data["hostname"]]
-            status.update_data(data)
-            self.stats[data["hostname"]] = status
+            self.stats[data["hostname"]] = status.update_data(data)
 
     def get_ws_names(self):
         return [name for name in self.stats.keys()]

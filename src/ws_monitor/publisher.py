@@ -124,10 +124,15 @@ def main() -> None:
     print(f"Starting broadcast on topic '{system_state_topic}'")
     time.sleep(1.0)
 
+    session_id = int(time.time()*1000) # millisecond time
+    seq_num = 0
+
     while True:
         try:
             t0 = time.monotonic()
             data = {}
+            data["session_id"] = session_id
+            data["seq_num"] = seq_num
             data["hostname"] = socket.gethostname()
             data["ip"] = get_ip()
             data["gpu"] = get_gpus_infos()
@@ -143,6 +148,7 @@ def main() -> None:
                 time.sleep(sleep_duration)
             else:
                 print(f"Warning: publisher is too slow, took {tf-t0:.3f}s)")
+            seq_num += 1
         except KeyboardInterrupt:
             print(f"Received SIGINT")
             break

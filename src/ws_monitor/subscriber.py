@@ -260,6 +260,9 @@ class WorkstationStatus:
     def update_data(self, data):
         new_data_sessionid = data.get("session_id", None)
         new_data_seqnum = data.get("seq_num", None)
+        if new_data_sessionid > self._last_received_sessionid:
+            # new session, reset seqnum
+            self._last_received_seqnum = float("-inf")
         is_old_session = new_data_sessionid is not None and self._last_received_sessionid is not None and new_data_sessionid < self._last_received_sessionid
         is_old_seqnum = new_data_seqnum is not None and self._last_received_seqnum is not None and new_data_seqnum <= self._last_received_seqnum
         if is_old_session or is_old_seqnum:
@@ -267,7 +270,7 @@ class WorkstationStatus:
             return self
         self._last_received_sessionid = new_data_sessionid
         self._last_received_seqnum = new_data_seqnum
-        print(f"Updating data for {self.hostname}: session_id {new_data_sessionid}, seq_num {new_data_seqnum}")
+        # print(f"Updating data for {self.hostname}: session_id {new_data_sessionid}, seq_num {new_data_seqnum}")
 
         self.data = data
         self.last_contact = time.time()

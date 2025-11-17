@@ -1,8 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
-  <title>Workstation Stats</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <title>Workstation Monitor</title>
   <script>
     async function refreshStats() {
       try {
@@ -25,13 +28,14 @@
   </script>
 </head>
 <body>
-  <h1>Workstation Stats</h1>
-  Please, <strong>DO NOT START NEW TASKS ON A WORKSTATION IF IT IS ALREADY IN USE</strong> by someone else!<br>
-  Starting a new task may interrupt the work of another user.<br>
-  If you need to use a workstation that is already in use, please <strong>CONTACT THE USER FIRST</strong>.<br>
-  <br>
+  <h1>Workstation Monitor</h1>
+  
+  <div class="notice">
+    Please, <strong>DO NOT START NEW TASKS ON A WORKSTATION IF IT IS ALREADY IN USE</strong> by someone else!<br>
+    Starting a new task may interrupt the work of another user.<br>
+    If you need to use a workstation that is already in use, please <strong>CONTACT THE USER FIRST</strong>.
+  </div>
 
-  <pre id="stats-pre">Loading...</pre>
-  <div id="stats-pre" style="white-space: pre; font-family: monospace;"></div>
+  <pre id="stats-pre" class="loading">Loading...</pre>
 </body>
 </html>

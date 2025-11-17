@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}{{ wsname }} User Activity - Workstation Monitor{% endblock %}
+
+{% block extra_head %}
+<style>
+  img {
+    display: block;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 900px;
+    height: auto;
+  }
+  
+  .image-container {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  
+  .image-container img {
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  .axis-image {
+    background-color: rgb(201, 201, 201);
+    border-radius: 2px;
+    box-sizing: border-box;
+    padding-bottom: 0.5rem;
+  }
+  
+  .user-section {
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  
+  .user-section h3 {
+    text-align: center;
+    color: var(--primary-color);
+    margin-top: 0;
+  }
+  
+  .footer-links {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-color);
+  }
+  
+  .footer-links a {
+    display: inline-block;
+    margin: 0.3rem 0.8rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ wsname }} - User Activity Images</h1>
+
+{% for username, img_data in user_images.items() %}
+<div class="user-section">
+  <h3>{{ username }}</h3>
+  {% if img_data %}
+  <div class="image-container">
+    <img src="data:image/png;base64,{{ img_data }}" alt="{{ username }} activity">
+    <img class="axis-image" src="{{ url_for('static', filename='24h_axis.svg') }}" alt="24h axis">
+  </div>
+  {% else %}
+  <p style="text-align: center; color: var(--warning-color);">Error generating image.</p>
+  {% endif %}
+</div>
+{% endfor %}
+
+<div class="footer-links">
+  {% for ws in ws_names %}
+  <a href="/{{ ws }}">{{ ws }}</a>
+  {% endfor %}
+  <br><br>
+  <a href="/">Home</a>
+</div>
+{% endblock %}

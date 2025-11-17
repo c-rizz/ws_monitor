@@ -1,0 +1,162 @@
+/* Modern, clean stylesheet for WS Monitor */
+
+/* Color scheme - dark theme with vibrant accents */
+:root {
+  --bg-color: #3a424d;
+  --text-color: #e4e6eb;
+  --primary-color: #64b5f6;
+  --accent-color: #4db6ac;
+  --warning-color: #ff7043;
+  --card-bg: #353d47;
+  --border-color: #4a5260;
+  --code-bg: #1e2329; 
+  --code-text: #f0f2f5;
+  --notice-bg: #3d3420;
+  --notice-border: #ffb74d;
+  --notice-text: #f5f5f5;
+}
+
+/* Base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  line-height: 1.6;
+  padding: 20px;
+  margin: 0 auto;
+}
+
+/* Header styles */
+h1 {
+  color: var(--primary-color);
+  font-size: 2.5rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 3px solid var(--primary-color);
+}
+
+h2 {
+  color: var(--text-color);
+  font-size: 1.8rem;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+
+h3 {
+  color: var(--text-color);
+  font-size: 1.4rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.8rem;
+}
+
+/* Warning/notice box */
+.notice {
+  background-color: var(--notice-bg);
+  color: var(--notice-text);
+  border-left: 4px solid var(--notice-border);
+  padding: 1rem 1.5rem;
+  margin: 1.5rem 0;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.notice strong {
+  color: var(--warning-color);
+}
+
+/* Stats display */
+#stats-pre {
+  background-color: var(--code-bg);
+  color: var(--code-text);
+  padding: 1.5rem;
+  border-radius: 8px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  overflow-x: auto;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  margin-top: 1.5rem;
+}
+
+#stats-pre a {
+    color: #81d4fa;
+}
+
+#stats-pre a:hover {
+    color: #4dd0e1;
+}
+
+/* Card style (for future use) */
+.card {
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  border: 1px solid var(--border-color);
+}
+
+/* Links */
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--accent-color);
+  text-decoration: underline;
+}
+
+/* Buttons (for future use) */
+button, .button {
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+button:hover, .button:hover {
+  background-color: #2980b9;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  body {
+    padding: 10px;
+  }
+  
+  h1 {
+    font-size: 2rem;
+  }
+  
+  #stats-pre {
+    font-size: 0.85rem;
+    padding: 1rem;
+  }
+}
+
+/* Loading animation */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.loading {
+  /**animation: pulse 1.5s ease-in-out infinite; **/
+}

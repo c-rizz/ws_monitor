@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}{{ wsname }} - Workstation Monitor{% endblock %}
+
+{% block extra_head %}
+<style>
+  img {
+    display: block;
+    margin: 1rem auto;
+    width: 100%;
+    max-width: 900px;
+    height: auto;
+    border-radius: 2px;
+  }
+  
+  .image-container {
+    max-width: 900px;
+    margin: 1rem auto;
+  }
+  
+  .image-container img {
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  .axis-image {
+    background-color: rgb(201, 201, 201);
+    box-sizing: border-box;
+    padding-bottom: 0.5rem;
+  }
+  
+  .activity-section {
+    margin: 2rem 0;
+  }
+  
+  .footer-links {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-color);
+  }
+  
+  .footer-links a {
+    display: inline-block;
+    margin: 0.3rem 0.8rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ wsname }} Weekly Activity</h1>
+
+<div class="activity-section">
+  <h2>Weekly Activity</h2>
+  <div class="image-container">
+    <img src="/{{ wsname }}/weekimage" alt="{{ wsname }} weekly activity">
+    <img class="axis-image" src="{{ url_for('static', filename='24h_axis.svg') }}" alt="24h axis">
+  </div>
+  
+  <pre id="stats-pre">{{ weekly_recap }}</pre>
+  
+  <p><a href="/{{ wsname }}/users" class="button">View User Activity Details</a></p>
+</div>
+
+<div class="footer-links">
+  {% for ws in ws_names %}
+  <a href="/{{ ws }}">{{ ws }}</a>
+  {% endfor %}
+  <br><br>
+  <a href="/">Home</a>
+</div>
+{% endblock %}

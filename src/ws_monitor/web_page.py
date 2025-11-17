@@ -79,46 +79,19 @@ def ws_weekuserimage_page(wsname):
   if imgs is None:
     return f"{wsname} not found"
   
-  html_imgs = ""
+  user_images = {}
   for username, img in imgs.items():
       success, encoded = cv2.imencode('.png', img)
-      if not success:
-          html_imgs += f"<div><h3>{username}</h3> Error generating image. </div><br>"
-          continue
-      b64_data = base64.b64encode(encoded.tobytes()).decode('utf-8')
-      img_tag = f'<img src="data:image/png;base64,{b64_data}">'
-      svg_url = url_for('static', filename='24h_axis.svg')
-      axis_img_tag = f'<img src="{svg_url}">'
-      html_imgs += f"""
-      <div style="width: 90%;">
-        <h3>{username}</h3>
-        {img_tag}
-        {axis_img_tag}
-      </div>
-      <br>"""
+      if success:
+          b64_data = base64.b64encode(encoded.tobytes()).decode('utf-8')
+          user_images[username] = b64_data
+      else:
+          user_images[username] = None
 
-  return f"""
-  <html>
-  <style>
-  img {{
-    display: block;   /* removes small whitespace under images */
-    margin: 0 auto;   /* centers horizontally */
-    width: 100%;      /* make both responsive */
-    max-width: 900px; /* optional */
-    height: auto;
-  }}
-  h3 {{
-    text-align: center;
-  }}
-  </style>
-  <head><title>{wsname} User Activity Images</title></head>
-  <body>
-      <h1>Images for {wsname}</h1>
-      {html_imgs}
-      {get_page_foot()}
-  </body>
-  </html>
-  """
+  return render_template("ws_users.html",
+                        wsname=wsname,
+                        user_images=user_images,
+                        ws_names=subscriber.get_ws_names())
 
 
 @app.route("/<wsname>")
@@ -127,40 +100,10 @@ def ws_details_page(wsname):
   if weekly_recap is None:
     weekly_recap = f"{wsname} not found"
   weekly_recap = "\n"+weekly_recap
-  return f'''
-<html>
-  <style>
-  img {{
-    display: block;   /* removes small whitespace under images */
-    margin: 0 auto;   /* centers horizontally */
-    width: 100%;      /* make both responsive */
-    max-width: 900px; /* optional */
-    height: auto;
-  }}
-  </style>
-  <head>
-    <title>{wsname}</title>
-    <style>
-      img {{
-        width: 100%;
-      }}
-    </style>
-  </head>
-  <body>
-    <h1>{wsname} Weekly activity</h1>
-    Weekly activity:
-    <br>
-    <img src="/{wsname}/weekimage">
-    <img src="/static/24h_axis.svg">
-    <br>
-    <pre>
-    {weekly_recap}
-    </pre>
-    <a href="/{wsname}/users"> Users activity detail </a>
-    <br>
-    {get_page_foot()}
-  </body>
-</html>'''
+  return render_template("ws_details.html", 
+                        wsname=wsname, 
+                        weekly_recap=weekly_recap,
+                        ws_names=subscriber.get_ws_names())
 
 
 with app.app_context():

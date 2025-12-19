@@ -1,3 +1,5 @@
+import os
+import threading
 import flask
 from flask import Flask, render_template, redirect, request, url_for, Response
 # import flask_login
@@ -19,18 +21,18 @@ app.secret_key = 'ihavenoideawhatthisis-yetanothertime  bahbehboh'
 @app.route('/index_old')
 def index():
    newline  = "\n"
+   css_url = url_for('static', filename='no_style.css')
    return f'''
 <!DOCTYPE html>
 <html>
 <head>
   <meta http-equiv="refresh" content="1" />
+  <link rel="stylesheet" href="{css_url}">
   <title>Workstations Status</title>
 </head>  
 <body>
  <h1>Workstations Status</h1>
- <pre>
-{subscriber.get_stats_recap()}
- </pre> 
+{subscriber.get_stats_recap_table()}
 </body>
 </html>'''
 
@@ -108,7 +110,6 @@ def ws_details_page(wsname):
 
 with app.app_context():
   subscriber = Subscriber()
-   
 
 if __name__ == '__main__':
   app.run(debug=False, host="0.0.0.0")

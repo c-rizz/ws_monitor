@@ -24,7 +24,7 @@ For each workstation then you can see the weekly usage history, also user by use
 ```
 git clone https://github.com/c-rizz/ws_monitor
 cd ws_monitor
-pyhton3 -m venv virtualenv
+python3 -m venv virtualenv
 . virtualenv/bin/activate
 pip install .
 ```

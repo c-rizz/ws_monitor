@@ -366,15 +366,90 @@ class Subscriber():
         return [name for name in self.stats.keys()]
 
     def get_stats_recap(self):
+        stats_list = self.get_stats_recap_dictlist()
+        s = ""
+        lines = []
+        for all_stats in stats_list:
+            try:
+                lines.append(  [f"{all_stats['hostname']}",
+                                f"[{all_stats['age']:.1f}s]",
+                                f" {all_stats['status']}",
+                                f" IP:{all_stats['ip']} ",
+                                f" CPU:{all_stats['CPU']} ",
+                                f" RAM:{all_stats['RAM']} ",
+                                f" GPU:{all_stats['GPU']}",
+                                f" VRAM:{all_stats['VRAM']}",
+                                f" disk:{all_stats['DISK']}",
+                                f" top_mem_user:{all_stats['top_mem_user']}",
+                                f" top_vram_users:{all_stats['top_vram_users']}",
+                                f" dl:{all_stats['daily_load']*100:.1f}%", 
+                                f" wl:{all_stats['weekly_load']*100:.1f}%",
+                                f" active_users:{all_stats['active_users']}", 
+                                # f" hourly:{ws_status.activity_seconds/ws_status.activity_len*100:.1f}%"
+                                ])
+            except KeyError as e:
+                lines.append(  [f"{all_stats['hostname']}",
+                                f"[{all_stats['age']:.1f}s]",
+                                f" {all_stats['status']}"])
+        
+        if len(lines)>0:
+            cols = 0
+            for line in lines:
+                if isinstance(line, list):
+                    cols = len(line)
+            widths = [1]*cols
+            for line in lines:
+                for i,col in enumerate(line):
+                    widths[i] = max(widths[i], len(col)+1)
+            for line in lines:
+                for i in range(len(line)):
+                    line[i] = line[i].ljust(widths[i])
+            for line in lines:
+                l0_length = len(line[0])
+                l0_strip = line[0].strip()
+                line[0] = f'<a href="/{l0_strip}">{l0_strip}</a>'+" "*(l0_length-len(l0_strip))
+                line_str = ("".join(line)+"\n")
+                s+= line_str
+        
+        return s
+        
+    def _make_link(self, hostname: str):
+        return f'<a href="/{hostname}">{hostname}</a>'
+    
+    def get_stats_recap_table(self):
+        stats_list = self.get_stats_recap_dictlist()
+        s = ""
+        s += "<table>\n"
+        for l in stats_list:
+            l["hostname"] = self._make_link(l["hostname"])
+            l["age"] = f"{l['age']:.1f}s"
+            l["daily_load"] = f"{l['daily_load']*100:.1f}%"
+            l["weekly_load"] = f"{l['weekly_load']*100:.1f}%"
+        columns = stats_list[0].keys()
+        s+= "<tr>" + "".join([f"<th>{col}</th>" for col in columns]) + "</tr>\n"
+        import re
+        for all_stats in stats_list:
+            cells = []
+            for col in columns:
+                val = all_stats.get(col, '???')
+                val_str = str(val)
+                # Find all percentages in the cell
+                numbers = re.findall(r'(\d+(?:\.\d+)?)%', val_str)
+                highlight = any(float(n) >= 90.0 for n in numbers)
+                if highlight:
+                    val_str = f'<span class="pct-high">{val_str}</span>'
+                cells.append(f"<td>{val_str}</td>")
+            s += "<tr>\n" + "\n".join(cells) + "</tr>\n"
+        s += "</table>\n"
+        return s
+
+    def get_stats_recap_dictlist(self):
         with self.data_rlock:
-            systems = sorted(self.stats.keys())
-            s = ""
             lines = []
-            for sys in systems:
+            for sys, ws_status in self.stats.items():
+                age = time.time()-ws_status.last_contact
                 try:
-                    ws_status = self.stats[sys]
                     data = ws_status.data
-                    age = time.time()-ws_status.last_contact
                     gpus = data["gpu"]
                     top_vram_users_str = ""
                     for gpu in gpus.values():
@@ -389,79 +464,48 @@ class Subscriber():
                     top_mem_user = max(cpu_stats["memratio_by_user"].items(), key=lambda user_ratio: user_ratio[1])
                     top_mem_user_str = top_mem_user[0]+f" {top_mem_user[1]*100:.1f}%"
 
-                    all_stats = {"cpu_ut" : f"{cpu_stats['cpu_utilization_ratio']*100:.2f}%",
-                                 "ram_ut" : f"{cpu_stats['cpu_mem_fill_ratio']*100:.2f}%",
-                                 "gpus_ut" : str([f"{gpu['stats']['gpu_proc_utilization_ratio']:.2f}%" for gpu in gpus.values()]),
-                                 "vrams_ut" : str([f"{gpu['stats']['gpu_mem_fill_ratio']*100:.2f}%" for gpu in gpus.values()]),
-                                 "disk_ut" : disk_str,
-                                 "top_mem_user" : top_mem_user_str,
-                                 "top_vram_users" : top_vram_users_str,
-                                 "active_users" : ws_status.active_users_in_last_minute}
-                    if age > 300:
-                        all_stats = {k:"???" for k in all_stats}
-                    hostname = data['hostname']
-                    ip = data.get('ip', 'N/A')
-                    hlink = f"{hostname}"
-                    active_users = all_stats['active_users']
+                    active_users = ws_status.active_users_in_last_minute
+
                     if age > 120:
                         status = "🟨"
                     elif len(active_users)>0:
                         status = "🟥"
                     else:
                         status = "🟩"
-                    lines.append( ([f"{hostname}",
-                                    f"[{age:.1f}s]",
-                                    f" {status}",
-                                    f" IP:{ip} ",
-                                    f" CPU:{all_stats['cpu_ut']} ",
-                                    f" RAM:{all_stats['ram_ut']} ",
-                                    f" GPU:{all_stats['gpus_ut']}",
-                                    f" VRAM:{all_stats['vrams_ut']}",
-                                    f" disk:{all_stats['disk_ut']}",
-                                    f" top_mem_user:{all_stats['top_mem_user']}",
-                                    f" top_vram_users:{all_stats['top_vram_users']}",
-                                    f" dl:{ws_status.daily_activity_ratio()*100:.1f}%", 
-                                    f" wl:{ws_status.weekly_activity_ratio()*100:.1f}%",
-                                    f" active_users:{all_stats['active_users']}", 
-                                    # f" hourly:{ws_status.activity_seconds/ws_status.activity_len*100:.1f}%"
-                                    ],
-                                    age, 
-                                    False,
-                                    hlink))
+                    hostname = str(data['hostname'])
+                    gpus_usage = [f"{gpu['stats']['gpu_proc_utilization_ratio']:.0f}%" for gpu in gpus.values()]
+                    if len(gpus_usage) == 1:
+                        gpus_usage = gpus_usage[0]
+                    elif len(gpus_usage) == 0:
+                        gpus_usage = "N/A"
+                    vrams_usage = [f"{gpu['stats']['gpu_mem_fill_ratio']*100:.2f}%" for gpu in gpus.values()]
+                    if len(vrams_usage) == 1:
+                        vrams_usage = vrams_usage[0]
+                    elif len(vrams_usage) == 0:
+                        vrams_usage = "N/A"
+                    all_stats = {"hostname" : hostname,
+                                 "age" : age,
+                                 "status" : status,
+                                 "ip" : data.get('ip', 'N/A'),
+                                 "CPU" : f"{cpu_stats['cpu_utilization_ratio']*100:.0f}%",
+                                 "RAM" : f"{cpu_stats['cpu_mem_fill_ratio']*100:.2f}%",
+                                 "GPU" : str(gpus_usage),
+                                 "VRAM" : str(vrams_usage),
+                                 "DISK" : disk_str,
+                                 "top_mem_user" : top_mem_user_str,
+                                 "top_vram_users" : top_vram_users_str,
+                                 "daily_load" : ws_status.daily_activity_ratio(),
+                                 "weekly_load" : ws_status.weekly_activity_ratio(),
+                                 "active_users" : active_users
+                                 }
+                    if age > 300:
+                        all_stats = {k:float("nan") if isinstance(v, (int, float, str)) else "???" for k,v in all_stats.items()}
+                    lines.append(all_stats)
                 except Exception as e:
-                    try:
-                        age = time.time()-ws_status.last_contact
-                    except Exception:
-                        age = None
-                    lines.append((f"{data['hostname']}: ERROR interpreting data. {e}\n", age, True, "#"))
-            
-            if len(lines)>0:
-                cols = 0
-                for line, age, raw, hlink in lines:
-                    if isinstance(line, list):
-                        cols = len(line)
-                widths = [1]*cols
-                for line, age, raw, hlink in lines:
-                    if not raw:
-                        for i,col in enumerate(line):
-                            widths[i] = max(widths[i], len(col)+1)
-                for line, age, raw, hlink in lines:
-                    if not raw:
-                        for i in range(len(line)):
-                            line[i] = line[i].ljust(widths[i])
-                for line, age, raw, hlink in lines:
-                    if raw:
-                        line_str = line
-                    else:
-                        l0_length = len(line[0])
-                        l0_strip = line[0].strip()
-                        line[0] = f'<a href="/{l0_strip}">{l0_strip}</a>'+" "*(l0_length-len(l0_strip))
-                        line_str = ("".join(line)+"\n")
-                    #if age > 60:
-                    #    line_str = strike(line_str)
-                    s+= line_str
-            
-            return s
+                    print(f"Error interpreting data from {data['hostname']}: {e}")
+                    lines.append({"hostname": sys, "status": f"🟧 ", "age": age})
+            lines.sort(key=lambda x: str(x['hostname']))
+            return lines
 
     def get_activity_img(self, ws_name, date : datetime.date | None = None):
         if ws_name in self.stats:

@@ -1,5 +1,7 @@
 /* Modern, clean stylesheet for WS Monitor */
 
+@import url('no_style.css');
+
 /* Color scheme - dark theme with vibrant accents */
 :root {
   --bg-color: #3a424d;

@@ -1,0 +1,41 @@
+
+/* Table styles */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px var(--card-box-shadow);
+}
+
+th, td {
+  text-align: center;
+  padding: 0.01rem 0.5rem;
+  border: 1px solid var(--border-color);
+  line-height: 1.2;
+}
+
+th {
+  background-color: var(--code-bg);
+  color: var(--primary-color);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+}
+
+td {
+  color: var(--text-color);
+}
+
+tr:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* High percentage highlight */
+.pct-high {
+  color: #ff4040;
+  font-weight: 700;
+}

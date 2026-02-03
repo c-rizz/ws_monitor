@@ -1,0 +1,16 @@
+# Web configuration for ws_monitor.
+#
+# Use the user_aliases section to merge multiple usernames that belong to the same person.
+# Each key is the canonical name; the list contains the aliases that should map to it.
+#
+# Example:
+# user_aliases:
+#   alice.rossi:
+#     - arossi_gpu
+#     - arossi_cpu
+#   shared_account:
+#     - ws-user-1
+#     - ws-user-2
+#
+# Remove the example entries and add your own.
+user_aliases: {}

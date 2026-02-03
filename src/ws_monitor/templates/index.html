@@ -7,29 +7,57 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <title>Workstation Monitor</title>
   <script>
+    const WEEKLY_USAGE_ENDPOINT = "/user_usage_percent_604800"; // 7 days worth of seconds
+
     async function refreshStats() {
       try {
-        let response = await fetch("/global_stats");
+        const response = await fetch("/global_stats");
         if (!response.ok) {
           throw new Error("Network response was not ok");
         }
-        let text = await response.text();
+        const text = await response.text();
         document.getElementById("stats-pre").innerHTML = text;
       } catch (err) {
         console.error("Error fetching stats:", err);
       }
     }
-
-    // Refresh periodically
     setInterval(refreshStats, 1000);
 
-    // Run once immediately on page load
-    window.onload = refreshStats;
+    async function refreshUserUsage() {
+      const target = document.getElementById("user-usage-pre");
+      const updatedAt = document.getElementById("user-usage-updated-at");
+
+      if (!target) {
+        return;
+      }
+
+      try {
+        const response = await fetch(WEEKLY_USAGE_ENDPOINT);
+        if (!response.ok) {
+          throw new Error("Network response was not ok");
+        }
+        const text = await response.text();
+        target.textContent = text.trim() || "No usage recorded in the last week.";
+        target.classList.remove("loading");
+        if (updatedAt) {
+          updatedAt.textContent = new Date().toLocaleTimeString();
+        }
+      } catch (err) {
+        console.error("Error fetching user usage:", err);
+        target.textContent = "Unable to load weekly usage right now.";
+      }
+    }
+    setInterval(refreshUserUsage, 60000);
+
+    window.onload = () => {
+      refreshStats();
+      refreshUserUsage();
+    };
   </script>
 </head>
 <body>
   <h1>Workstation Monitor</h1>
-  
+
   <div class="notice">
     Please, <strong>DO NOT START NEW TASKS ON A WORKSTATION IF IT IS ALREADY IN USE</strong> by someone else!<br>
     Starting a new task may interrupt the work of another user.<br>
@@ -40,6 +68,39 @@
     For the other machines, please ask for a dedicated account.<br>
   </div>
 
-  <pre id="stats-pre" class="loading">Loading...</pre>
+  <pre id="stats-pre" class="loading">Loading latest stats...</pre>
+
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+
+
+  <section class="card user-usage-card">
+    <div class="user-usage-header">
+      <h2>Weekly Usage Share</h2>
+      <p class="user-usage-subtitle">Share of total workstation minutes over the last 7 days.</p>
+    </div>
+    <pre id="user-usage-pre" class="loading">Loading weekly usage...</pre>
+    <p class="user-usage-meta">Updates every minute • Last refresh <span id="user-usage-updated-at">pending</span></p>
+  </section>
 </body>
 </html>

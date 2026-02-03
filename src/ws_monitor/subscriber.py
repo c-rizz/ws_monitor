@@ -107,7 +107,7 @@ class UsageStats:
             self._yearly_minute_monitored = d["yearly_mon"]
             self._yearly_minute_active_users = d["yearly_users"]
             self._users = d["users"]
-            print(f"{self._wsname}: loaded activity from file")
+            print(f"{self._wsname}: loaded activity from file at {os.path.abspath(self._filepath)}")
         except OSError as e:
             print(f"could not open file {self._filepath}, will be created")
             pass
@@ -171,6 +171,8 @@ class UsageStats:
 
         return user_images
     
+    
+    
     def get_week_recap(self):
         dt = datetime.datetime.now()
         # time_from_year_start = t-datetime.datetime.fromisoformat(f"{dt.year}-01-01").timestamp()
@@ -200,6 +202,26 @@ class UsageStats:
             ret_strs.append(daystr)
         
         return "\n".join(ret_strs)
+
+    def get_usage_minutes_per_user(self, from_datetime: datetime.datetime, to_datetime: datetime.datetime) -> dict[str, int]:
+        """Return the per-user active minute counts for the last 7 days (inclusive)."""
+        # Align to midnight six days ago so we cover exactly seven 24h blocks ending today.
+        start_idx = max(self.get_datetime_idx(from_datetime), 0)
+        end_idx = min(self.get_datetime_idx(to_datetime), self._yearly_minute_active_users.shape[0])
+        if start_idx >= end_idx:
+            return {}
+
+        week_users = self._yearly_minute_active_users[start_idx:end_idx]
+        minutes_by_user: dict[str, int] = {}
+        for name, idx in self._users.items():
+            if idx >= 16:
+                # Minutes cannot be represented beyond the 16 tracked bit positions.
+                minutes_by_user[name] = 0
+                continue
+            mask = 1 << idx
+            active_minutes = int(np.count_nonzero(np.bitwise_and(week_users, mask)))
+            minutes_by_user[name] = active_minutes
+        return minutes_by_user
 
     def get_usage_ratio(self, start_datetime : datetime.datetime, end_datetime : datetime.datetime):
         start_idx = max(self.get_datetime_idx(start_datetime),0)
@@ -335,18 +357,34 @@ class WorkstationStatus:
             start_datetime = datetime.datetime.now()-datetime.timedelta(weeks=1),
             end_datetime = datetime.datetime.now()
         )
-    
+
+    def weekly_usage_minutes_per_user(self):
+        now = datetime.datetime.now()
+        return self._usage_stats.get_usage_minutes_per_user(
+            from_datetime = datetime.datetime.combine(now.date() - datetime.timedelta(days=6), datetime.datetime.min.time()),
+            to_datetime = now
+        )
+
+    def usage_minutes_per_user(self, since_seconds_ago: int):
+        now = datetime.datetime.now()
+        return self._usage_stats.get_usage_minutes_per_user(
+            from_datetime = now - datetime.timedelta(seconds=since_seconds_ago),
+            to_datetime = now
+        )
+
     def get_usage_stats(self):
         return self._usage_stats
     
 
 class Subscriber():
     def __init__(self,  server : str = "tcp://*:9452",
-                        data_folder : str = "./data"):
+                        data_folder : str = "./data",
+                        user_alias_lookup: dict[str, str] | None = None):
         self.data_rlock = threading.RLock()
         self.stats : dict[str,WorkstationStatus] = {}
         self._server_url = server
         self.data_folder = data_folder
+        self._user_alias_lookup: dict[str, str] = user_alias_lookup or {}
         print(f"Using folder {os.path.abspath(data_folder)}")
         print(f"Listening on '{server}'")
         worker = threading.Thread(  target = self.receiver_worker,
@@ -407,7 +445,7 @@ class Subscriber():
             for line in lines:
                 l0_length = len(line[0])
                 l0_strip = line[0].strip()
-                line[0] = f'<a href="/{l0_strip}">{l0_strip}</a>'+" "*(l0_length-len(l0_strip))
+                line[0] = f'<a href="/{l0_strip}/recap">{l0_strip}</a>'+" "*(l0_length-len(l0_strip))
                 line_str = ("".join(line)+"\n")
                 s+= line_str
         
@@ -527,6 +565,26 @@ class Subscriber():
         else:
             return None
 
+    def _merge_user_aliases(self, user_tot_usage: dict[str, int]) -> dict[str, int]:
+        if not self._user_alias_lookup:
+            return user_tot_usage
+        merged: dict[str, int] = {}
+        for username, minutes in user_tot_usage.items():
+            canonical = self._user_alias_lookup.get(username, username)
+            merged[canonical] = merged.get(canonical, 0) + minutes
+        return merged
+
+    def get_total_weekly_usage_minutes(self, since_seconds_ago) -> dict[str, int]:
+        user_tot_usage: dict[str, int] = {}
+        with self.data_rlock:
+            for ws_name, ws_status in self.stats.items():
+                ws_user_usage = ws_status.usage_minutes_per_user(since_seconds_ago=since_seconds_ago)
+                for username, minutes in ws_user_usage.items():
+                    if username not in user_tot_usage:
+                        user_tot_usage[username] = 0
+                    user_tot_usage[username] += minutes
+            user_tot_usage = self._merge_user_aliases(user_tot_usage)
+        return user_tot_usage
 
     def receiver_worker(self, bind_to : str):
         system_state_topic = b'system_stats'

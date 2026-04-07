@@ -100,7 +100,8 @@ def page_not_found(e):
 @app.route("/")
 def index2():
     # This will render templates/index.html
-    return render_template("index.html")
+    notice = WEB_CONFIG.get("notice_html", "")
+    return render_template("index.html", notice=notice)
 
 @app.route("/global_stats")
 def global_stats():

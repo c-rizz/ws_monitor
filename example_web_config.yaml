@@ -13,4 +13,12 @@
 #     - ws-user-2
 #
 # Remove the example entries and add your own.
+#
+# Use the notice_html field to display a notice at the top of the page.
+# The value is rendered as raw HTML, so you can use HTML tags.
+#
+# Example:
+# notice_html: |
+#   Please, <strong>DO NOT START NEW TASKS ON A WORKSTATION IF IT IS ALREADY IN USE</strong> by someone else!<br>
+#   If you need to use a workstation that is already in use, please <strong>CONTACT THE USER FIRST</strong>.<br>
 

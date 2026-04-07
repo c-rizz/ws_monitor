@@ -7,7 +7,24 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <title>Workstation Monitor</title>
   <script>
-    const WEEKLY_USAGE_ENDPOINT = "/user_usage_percent_604800"; // 7 days worth of seconds
+    const USAGE_CARDS = [
+      {
+        durationSec: 604800,
+        targetId: "user-usage-weekly",
+        updatedAtId: "user-usage-weekly-updated-at",
+        ratioTargetId: "usage-ratio-weekly",
+        emptyMessage: "No usage recorded in the last week.",
+      },
+      {
+        durationSec: 86400,
+        targetId: "user-usage-daily",
+        updatedAtId: "user-usage-daily-updated-at",
+        ratioTargetId: "usage-ratio-daily",
+        emptyMessage: "No usage recorded in the last 24 hours.",
+      },
+    ];
+    let serverBootId = null;
+    const SERVER_BOOT_POLL_INTERVAL_MS = 60000;
 
     async function refreshStats() {
       try {
@@ -23,35 +40,136 @@
     }
     setInterval(refreshStats, 1000);
 
-    async function refreshUserUsage() {
-      const target = document.getElementById("user-usage-pre");
-      const updatedAt = document.getElementById("user-usage-updated-at");
+    async function refreshUserUsage(cardConfig) {
+      const target = document.getElementById(cardConfig.targetId);
+      const updatedAt = document.getElementById(cardConfig.updatedAtId);
 
       if (!target) {
         return;
       }
 
       try {
-        const response = await fetch(WEEKLY_USAGE_ENDPOINT);
+        const response = await fetch(`/user_usage_percent_${cardConfig.durationSec}`);
         if (!response.ok) {
           throw new Error("Network response was not ok");
         }
-        const text = await response.text();
-        target.textContent = text.trim() || "No usage recorded in the last week.";
+        const text = (await response.text()).trim();
+        target.textContent = text || cardConfig.emptyMessage;
         target.classList.remove("loading");
         if (updatedAt) {
           updatedAt.textContent = new Date().toLocaleTimeString();
         }
       } catch (err) {
         console.error("Error fetching user usage:", err);
-        target.textContent = "Unable to load weekly usage right now.";
+        target.textContent = "Unable to load usage right now.";
       }
     }
-    setInterval(refreshUserUsage, 60000);
+
+    async function refreshUsageRatio(cardConfig) {
+      const target = document.getElementById(cardConfig.ratioTargetId);
+      if (!target) {
+        return;
+      }
+      try {
+        const response = await fetch(`/total_usage_ratio_${cardConfig.durationSec}`);
+        if (!response.ok) {
+          throw new Error("Network response was not ok");
+        }
+        const payload = await response.json();
+        const ratio = payload.ratio;
+        if (typeof ratio === "number" && !Number.isNaN(ratio)) {
+          const percentText = (ratio * 100).toFixed(1);
+          target.textContent = `Average utilization: ${percentText}%.`;
+        } else {
+          target.textContent = "Average utilization: collecting data...";
+        }
+      } catch (err) {
+        console.error("Error fetching usage ratio", err);
+        target.textContent = "Average utilization: unavailable.";
+      }
+    }
+
+    function refreshAllUsage() {
+      USAGE_CARDS.forEach((card) => {
+        refreshUserUsage(card);
+        refreshUsageRatio(card);
+      });
+    }
+
+    setInterval(refreshAllUsage, 60000);
+
+    async function requestResources() {
+      const username = prompt("What's your name?", "");
+      if (username === null) {
+        return;
+      }
+
+      try {
+        const response = await fetch("/request_resources", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user: username }),
+        });
+        if (!response.ok) {
+          throw new Error("Server returned an error");
+        }
+        await refreshResourceRequests();
+      } catch (err) {
+        console.error("Error sending resource request", err);
+      }
+    }
+
+    async function refreshResourceRequests() {
+      const container = document.getElementById("resource-request-list");
+      if (!container) {
+        return;
+      }
+      try {
+        const response = await fetch("/request_resources");
+        if (!response.ok) {
+          throw new Error("Failed to load requests");
+        }
+        const entries = await response.json();
+        if (entries.length === 0) {
+          container.innerHTML = "<li>No pending requests.</li>";
+          return;
+        }
+        container.innerHTML = entries
+          .map((entry) => `<li> ${entry.timestamp} : ${entry.user} needs more compute! </li>`)
+          .join("");
+      } catch (err) {
+        console.error("Error fetching resource requests", err);
+      }
+    }
+    setInterval(refreshResourceRequests, 10000);
+
+
+    async function checkServerBootId() {
+      try {
+        const response = await fetch("/server_boot_id");
+        if (!response.ok) {
+          throw new Error("Failed to load boot id");
+        }
+        const payload = await response.json();
+        if (!serverBootId) {
+          serverBootId = payload.boot_id;
+          return;
+        }
+        if (payload.boot_id && payload.boot_id !== serverBootId) {
+          location.reload();
+        }
+      } catch (err) {
+        console.error("Error checking boot id", err);
+      }
+    }
+    setInterval(checkServerBootId, SERVER_BOOT_POLL_INTERVAL_MS);
+
 
     window.onload = () => {
       refreshStats();
-      refreshUserUsage();
+      refreshAllUsage();
+      refreshResourceRequests();
+      checkServerBootId();
     };
   </script>
 </head>
@@ -68,39 +186,90 @@
     For the other machines, please ask for a dedicated account.<br>
   </div>
 
+
   <pre id="stats-pre" class="loading">Loading latest stats...</pre>
 
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-  <br>
-
-
   <section class="card user-usage-card">
-    <div class="user-usage-header">
-      <h2>Weekly Usage Share</h2>
-      <p class="user-usage-subtitle">Share of total workstation minutes over the last 7 days.</p>
-    </div>
-    <pre id="user-usage-pre" class="loading">Loading weekly usage...</pre>
-    <p class="user-usage-meta">Updates every minute • Last refresh <span id="user-usage-updated-at">pending</span></p>
+    <details class="usage-details">
+      <summary class="user-usage-summary">
+        <div class="user-usage-header">
+          <h2>Aggregate Usage Share</h2>
+        </div>
+        <span class="user-usage-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="user-usage-body">
+        <div class="combined-usage-panels">
+          <div class="usage-panel">
+            <h3>Weekly</h3>
+            <p id="usage-ratio-weekly" class="usage-ratio">Average utilization: collecting data...</p>
+            <pre id="user-usage-weekly" class="loading">Loading weekly usage...</pre>
+          </div>
+          <div class="usage-panel">
+            <h3>Daily</h3>
+            <p id="usage-ratio-daily" class="usage-ratio">Average utilization: collecting data...</p>
+            <pre id="user-usage-daily" class="loading">Loading daily usage...</pre>
+          </div>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+  <br>
+
+
+  <section class="card resource-card">
+    <button type="button" onclick="requestResources()"> I need a workstation! 😭 </button>
+    <ul id="resource-request-list" class="resource-request-list">
+      <li>Loading requests...</li>
+    </ul>
   </section>
 </body>
 </html>

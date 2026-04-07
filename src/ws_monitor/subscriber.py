@@ -341,10 +341,6 @@ class WorkstationStatus:
                 active_users.add(user)
         return list(active_users)
     
-    def activity_ratio(self):
-        if self._monitored_secs == 0:
-            return 0.0
-        return self._active_secs / self._monitored_secs
     
     def daily_activity_ratio(self):
         return self._usage_stats.get_usage_ratio(
@@ -357,12 +353,12 @@ class WorkstationStatus:
             start_datetime = datetime.datetime.now()-datetime.timedelta(weeks=1),
             end_datetime = datetime.datetime.now()
         )
-
-    def weekly_usage_minutes_per_user(self):
+    
+    def activity_ratio(self,  since_seconds_ago: int):
         now = datetime.datetime.now()
-        return self._usage_stats.get_usage_minutes_per_user(
-            from_datetime = datetime.datetime.combine(now.date() - datetime.timedelta(days=6), datetime.datetime.min.time()),
-            to_datetime = now
+        return self._usage_stats.get_usage_ratio(
+            start_datetime = now - datetime.timedelta(seconds=since_seconds_ago),
+            end_datetime = now
         )
 
     def usage_minutes_per_user(self, since_seconds_ago: int):
@@ -571,10 +567,11 @@ class Subscriber():
         merged: dict[str, int] = {}
         for username, minutes in user_tot_usage.items():
             canonical = self._user_alias_lookup.get(username, username)
+            # print(f"Merging user '{username}' into canonical '{canonical}'")
             merged[canonical] = merged.get(canonical, 0) + minutes
         return merged
 
-    def get_total_weekly_usage_minutes(self, since_seconds_ago) -> dict[str, int]:
+    def get_total_usage_minutes(self, since_seconds_ago) -> dict[str, int]:
         user_tot_usage: dict[str, int] = {}
         with self.data_rlock:
             for ws_name, ws_status in self.stats.items():
@@ -585,6 +582,18 @@ class Subscriber():
                     user_tot_usage[username] += minutes
             user_tot_usage = self._merge_user_aliases(user_tot_usage)
         return user_tot_usage
+    
+    def get_total_usage_ratio(self, since_seconds_ago) -> float:
+        ratio_sum = 0.0
+        ratio_count = 0
+        with self.data_rlock:
+            for ws_name, ws_status in self.stats.items():
+                active_ratio = ws_status.activity_ratio(since_seconds_ago=since_seconds_ago)
+                if not np.isnan(active_ratio):
+                    ratio_sum += active_ratio
+                    ratio_count += 1
+        total_ratio = ratio_sum / ratio_count if ratio_count > 0 else float("nan")
+        return total_ratio
 
     def receiver_worker(self, bind_to : str):
         system_state_topic = b'system_stats'

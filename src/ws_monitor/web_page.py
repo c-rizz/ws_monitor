@@ -1,7 +1,9 @@
 import os
 import threading
+import secrets
+import math
 import flask
-from flask import Flask, render_template, redirect, request, url_for, Response
+from flask import Flask, render_template, redirect, request, url_for, Response, jsonify
 # import flask_login
 import cv2
 import numpy as np
@@ -19,6 +21,7 @@ from ws_monitor.subscriber import Subscriber
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 CONFIG_ENV_VAR = "WSMONITOR_WEB_CONFIG"
 DEFAULT_WEB_CONFIG_PATH = os.path.join(BASE_DIR, "config", "web_config.yaml")
+SECRET_KEY_ENV_VAR = "WSMONITOR_FLASK_SECRET_KEY"
 
 
 def load_web_config(config_path: str) -> dict:
@@ -54,12 +57,23 @@ def build_user_alias_lookup(alias_section) -> dict[str, str]:
   return lookup
 
 
+def get_flask_secret_key() -> str:
+  secret = os.environ.get(SECRET_KEY_ENV_VAR)
+  if secret:
+    return secret
+  secret = secrets.token_hex(32)
+  print(f"flask_secret: generated ephemeral key because {SECRET_KEY_ENV_VAR} is unset")
+  return secret
+
+
 WEB_CONFIG_PATH = os.environ.get(CONFIG_ENV_VAR, DEFAULT_WEB_CONFIG_PATH)
 WEB_CONFIG = load_web_config(WEB_CONFIG_PATH)
 USER_ALIAS_LOOKUP = build_user_alias_lookup(WEB_CONFIG.get("user_aliases", {}))
+SERVER_BOOT_ID = secrets.token_hex(8)
 
 app = Flask(__name__)
-app.secret_key = 'ihavenoideawhatthisis-yetanothertime  bahbehboh'
+app.secret_key = get_flask_secret_key()
+_resource_requests : list[dict] = []
 
 @app.route('/index_old')
 def index():
@@ -96,14 +110,76 @@ def global_stats():
 
 @app.route("/user_usage_percent_<int:duration_sec>")
 def user_usage_percent(duration_sec):
-    duration = duration_sec  # duration in seconds
-    usage_minutes = subscriber.get_total_weekly_usage_minutes(since_seconds_ago=duration)
-    total_minutes = duration // 60
-    usage_percent = {user: (minutes / total_minutes) * 100 for user, minutes in usage_minutes.items()}
-    usage_percent = {k:v for k,v in usage_percent.items() if v >= 0.1}
-    usage_percent = sorted(usage_percent.items(), key=lambda item: item[1], reverse=True)
-    usage_percent = "\n".join([f"{user}: {percent:.2f}%" for user, percent in usage_percent])
-    return Response(usage_percent, mimetype="text/plain")
+  duration = duration_sec  # duration in seconds
+  usage_minutes = subscriber.get_total_usage_minutes(since_seconds_ago=duration)
+  total_minutes = duration // 60
+  usage_percent = {user: (minutes / total_minutes) * 100 for user, minutes in usage_minutes.items() if total_minutes > 0}
+  usage_percent = {k: v for k, v in usage_percent.items() if v >= 0.1}
+  sorted_usage = sorted(usage_percent.items(), key=lambda item: item[1], reverse=True)
+
+  if not sorted_usage:
+    usage_percent_text = ""
+  else:
+    max_name_len = max(len(user) for user, _ in sorted_usage)
+    rows = []
+    for user, percent in sorted_usage:
+
+      
+      if percent > 300:
+          color = "🟪" #"🫠"
+      elif percent > 200:
+          color = "🟥" #"😡"
+      elif percent > 100:
+          color = "🟨" #"😐"
+      elif percent > 50:
+          color = "🟩" #"🙂"
+      else:
+          color = "⬜" #"🙃"
+      rows.append(f"{color} {user.ljust(max_name_len)}  {percent:6.2f}%")
+    usage_percent_text = "\n".join(rows)
+  return Response(usage_percent_text, mimetype="text/plain")
+
+
+@app.route("/total_usage_ratio_<int:duration_sec>")
+def total_usage_ratio(duration_sec):
+  ratio = subscriber.get_total_usage_ratio(since_seconds_ago=duration_sec)
+  if math.isnan(ratio):
+    ratio_payload = None
+  else:
+    ratio_payload = ratio
+  return jsonify({"ratio": ratio_payload, "duration_sec": duration_sec})
+
+
+@app.route("/request_resources", methods=["POST"])
+def request_resources():
+  payload = request.get_json(silent=True) or {}
+  user = (payload.get("user") or "anonymous").strip() or "anonymous"
+  now = datetime.now()
+  timestamp = datetime.strftime(now, "%H:%M:%S")
+  entry = {"user": user, "timestamp": timestamp, "datetime": now}
+  _resource_requests.append(entry)
+  if len(_resource_requests) > 10:
+    del _resource_requests[:-10]
+  print(f"Resource request received from {user} at {timestamp}")
+  return jsonify({"status": "ok"})
+
+@app.route("/request_resources", methods=["GET"])
+def list_resource_requests():
+  reqs_no_old = []
+  now = datetime.now()
+  for r in _resource_requests:
+    delta = now - r["datetime"]
+    if delta.total_seconds() <= 3600:
+      reqs_no_old.append(r)
+  _resource_requests.clear()
+  _resource_requests.extend(reqs_no_old)
+  reqs = [{"user": r["user"], "timestamp": r["timestamp"]} for r in reversed(_resource_requests)]
+  return jsonify(list(reversed(reqs)))
+
+
+@app.route("/server_boot_id")
+def server_boot_id():
+  return jsonify({"boot_id": SERVER_BOOT_ID})
 
 @app.route("/<wsname>/weekimage_history_<date_yyyymmdd>")
 def ws_weekimage_history_page(wsname, date_yyyymmdd):

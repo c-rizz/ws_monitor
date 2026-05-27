@@ -310,6 +310,7 @@ class WorkstationStatus:
         active = 1 if len(self.active_users) > 0 else 0
         curr_time = time.monotonic()
         time_since_update = curr_time - self._last_activity_update
+        self._last_activity_update = curr_time
         if active:
             self._last_active_time = curr_time
         else:
@@ -478,6 +479,7 @@ class Subscriber():
         return s
 
     def get_stats_recap_dictlist(self):
+        t0 = time.monotonic()
         with self.data_rlock:
             lines = []
             for sys, ws_status in self.stats.items():
@@ -539,7 +541,9 @@ class Subscriber():
                     print(f"Error interpreting data from {data['hostname']}: {e}")
                     lines.append({"hostname": sys, "status": f"🟧 ", "age": age})
             lines.sort(key=lambda x: str(x['hostname']))
-            return lines
+        tf = time.monotonic()
+        print(f"Held lock for {(tf-t0)*1000:.3f}ms")
+        return lines
 
     def get_activity_img(self, ws_name, date : datetime.date | None = None):
         if ws_name in self.stats:
@@ -605,9 +609,14 @@ class Subscriber():
         s.setsockopt(zmq.SUBSCRIBE, system_state_topic)
         try:
             while True:
-                topic, msg = s.recv_multipart()
-                data = json.loads(msg)
-                self.update_stats(data)
+                try:
+                    topic, msg = s.recv_multipart()
+                    data = json.loads(msg)
+                    self.update_stats(data)
+                except KeyboardInterrupt:
+                    raise
+                except Exception as e:
+                    print(f"receiver_worker: error processing message: {e}")
         except KeyboardInterrupt:
             pass
 

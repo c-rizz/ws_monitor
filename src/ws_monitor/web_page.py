@@ -2,6 +2,7 @@ import os
 import threading
 import secrets
 import math
+import time
 import flask
 from flask import Flask, render_template, redirect, request, url_for, Response, jsonify
 # import flask_login
@@ -74,6 +75,9 @@ SERVER_BOOT_ID = secrets.token_hex(8)
 app = Flask(__name__)
 app.secret_key = get_flask_secret_key()
 _resource_requests : list[dict] = []
+_global_stats_cache_lock = threading.Lock()
+_global_stats_cache_ttl_sec = 1.0
+_global_stats_cache = {"timestamp": 0.0, "payload": ""}
 
 @app.route('/index_old')
 def index():
@@ -105,8 +109,13 @@ def index2():
 
 @app.route("/global_stats")
 def global_stats():
-    # Replace with your subscriber.get_stats_recap(wsname)
-    stats = subscriber.get_stats_recap()
+    now = time.monotonic()
+    with _global_stats_cache_lock:
+      cache_age = now - _global_stats_cache["timestamp"]
+      if cache_age >= _global_stats_cache_ttl_sec:
+        _global_stats_cache["payload"] = subscriber.get_stats_recap()
+        _global_stats_cache["timestamp"] = now
+      stats = _global_stats_cache["payload"]
     return Response(stats, mimetype="text/plain")
 
 @app.route("/user_usage_percent_<int:duration_sec>")

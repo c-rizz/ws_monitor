@@ -22,11 +22,14 @@ dependencies = [
     "pyzmq==26.2.0",
     "psutil",
     "pyyaml==6.0.2",
-    "flask"
+    "flask",
+    "numpy",
+    "opencv-python",
+    "gunicorn"
 ]
 
 [project.scripts]
 wsmon-publisher = "ws_monitor.publisher:main"
-wsmon-webpage = "ws_monitor.web_page:web_page"
+wsmon-server = "ws_monitor.web_page:main"
 [tool.setuptools]
 script-files = ["src/ws_monitor/wsmon_run_flask.sh", "src/ws_monitor/wsmon_run_gunicorn.sh","src/ws_monitor/wsmon_run_flask_restarting.sh"]

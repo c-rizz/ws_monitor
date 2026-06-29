@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import datetime
 import time
 import argparse
 import zmq
@@ -21,15 +22,23 @@ def get_gpus_infos():
         mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
         procs = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
         user_mem_usageratio = {}
+        top_users_proc = {}
         for proc in procs:
             try:
-                user = psutil.Process(proc.pid).username()
+                procinfos = psutil.Process(proc.pid)
+                user = procinfos.username()
+                proc_creation_time = procinfos.create_time()
+                top_proc_name = procinfos.name()
             except psutil.NoSuchProcess as e:
                 print(f"Error getting process info for pid {proc.pid}")
                 user = "???"
             if user not in user_mem_usageratio:
                 user_mem_usageratio[user] = 0.0
             user_mem_usageratio[user] += proc.usedGpuMemory/mem.total
+            if user not in top_users_proc or proc.usedGpuMemory > top_users_proc[user]["usedGpuMemory"]:
+                top_users_proc[user] = {  "creation_time": proc_creation_time,
+                                          "name" : top_proc_name,
+                                          "usedGpuMemory" : proc.usedGpuMemory}
         #print(f"gpu user_mem_usageratio = {user_mem_usageratio}")
         gpu_infos[str(i)] = {   "name" : pynvml.nvmlDeviceGetName(handle),
                                 "memory_size_bytes" : mem.total,
@@ -37,7 +46,8 @@ def get_gpus_infos():
                                             "gpu_mem_util" : util.memory,
                                             "gpu_mem_fill_ratio" : 1-mem.free/mem.total,
                                             },
-                                "memratio_by_user" : user_mem_usageratio}
+                                "memratio_by_user" : user_mem_usageratio,
+                                "top_users_proc" : top_users_proc}
     return gpu_infos
 
 def get_memory_usage_by_user_smem():

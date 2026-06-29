@@ -70,6 +70,8 @@ def get_flask_secret_key() -> str:
 WEB_CONFIG_PATH = os.environ.get(CONFIG_ENV_VAR, DEFAULT_WEB_CONFIG_PATH)
 WEB_CONFIG = load_web_config(WEB_CONFIG_PATH)
 USER_ALIAS_LOOKUP = build_user_alias_lookup(WEB_CONFIG.get("user_aliases", {}))
+DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), ".local", "share", "ws_monitor", "data")
+DATA_DIR = WEB_CONFIG.get("data_dir", DEFAULT_DATA_DIR)
 SERVER_BOOT_ID = secrets.token_hex(8)
 
 app = Flask(__name__)
@@ -252,7 +254,36 @@ def ws_details_page(wsname):
 
 
 with app.app_context():
-  subscriber = Subscriber(user_alias_lookup=USER_ALIAS_LOOKUP)
+  subscriber = Subscriber(user_alias_lookup=USER_ALIAS_LOOKUP, data_folder=DATA_DIR, autostart=False)
+
+def main():
+  import argparse
+  ap = argparse.ArgumentParser()
+  ap.add_argument("--gunicorn", action="store_true", help="Serve with gunicorn instead of Flask's dev server.")
+  ap.add_argument("--port", type=int, default=9423, help="Port to listen on.")
+  ap.add_argument("--workers", type=int, default=1, help="Number of gunicorn workers (only used with --gunicorn).")
+  args = ap.parse_args()
+
+  if args.gunicorn:
+    from gunicorn.app.base import BaseApplication
+
+    def post_fork(server, worker):
+        # ZMQ socket was never bound in the master (autostart=False), so we
+        # can safely bind fresh here in the worker after fork.
+        subscriber._start_receiver()
+
+    class GunicornApp(BaseApplication):
+      def load_config(self):
+        self.cfg.set("bind", f"0.0.0.0:{args.port}")
+        self.cfg.set("workers", 1)  # only one process can hold the ZMQ socket
+        self.cfg.set("preload_app", True)
+        self.cfg.set("post_fork", post_fork)
+      def load(self):
+        return app
+    GunicornApp().run()
+  else:
+    subscriber._start_receiver()
+    app.run(debug=False, host="0.0.0.0", port=args.port)
 
 if __name__ == '__main__':
-  app.run(debug=False, host="0.0.0.0")
+  main()

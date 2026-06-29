@@ -296,7 +296,7 @@ class WorkstationStatus:
 
         self.data = data
         self.last_contact = time.time()
-        self.active_users = self.get_active_users()
+        self.active_users, self.users_top_proc_age = self.get_active_users()
         if not hasattr(self, 'active_users_in_last_minute'):
             self.active_users_in_last_minute_times = {}
         self.active_users_in_last_minute_times = {k:v for k,v in self.active_users_in_last_minute_times.items() if time.monotonic()-v < 60}
@@ -331,17 +331,21 @@ class WorkstationStatus:
     
     def get_active_users(self):
         active_users = set()
+        users_top_proc_age = {}
         gpus = self.data["gpu"]
         for gpu in gpus.values():
             for user, vram_ratio in gpu["memratio_by_user"].items():
                 if vram_ratio > 0.05:
                     active_users.add(user)
+                    t = time.time()
+                    if "top_users_proc" in gpu and user in gpu["top_users_proc"]:
+                        top_proc_creation_time = gpu.get("top_users_proc", {}).get(user, {}).get("creation_time", t)
+                        users_top_proc_age[user] = t - top_proc_creation_time
         cpu_stats = self.data["cpu"]
         for user, ram_ratio in cpu_stats["memratio_by_user"].items():
             if ram_ratio > 0.3 and ram_ratio < cpu_stats["cpu_mem_fill_ratio"]: # there's some bug in the user ram_ratio, exclude it if it doesn't make sense
                 active_users.add(user)
-        return list(active_users)
-    
+        return list(active_users), users_top_proc_age
     
     def daily_activity_ratio(self):
         return self._usage_stats.get_usage_ratio(
@@ -376,7 +380,8 @@ class WorkstationStatus:
 class Subscriber():
     def __init__(self,  server : str = "tcp://*:9452",
                         data_folder : str = "./data",
-                        user_alias_lookup: dict[str, str] | None = None):
+                        user_alias_lookup: dict[str, str] | None = None,
+                        autostart : bool = True):
         self.data_rlock = threading.RLock()
         self.stats : dict[str,WorkstationStatus] = {}
         self._server_url = server
@@ -384,8 +389,13 @@ class Subscriber():
         self._user_alias_lookup: dict[str, str] = user_alias_lookup or {}
         print(f"Using folder {os.path.abspath(data_folder)}")
         print(f"Listening on '{server}'")
+        if autostart:
+            self._start_receiver()
+
+    def _start_receiver(self):
         worker = threading.Thread(  target = self.receiver_worker,
-                                    kwargs = { "bind_to" : self._server_url})
+                                    kwargs = { "bind_to" : self._server_url},
+                                    daemon = True)
         worker.start()
 
     def update_stats(self, data : dict):
@@ -501,6 +511,8 @@ class Subscriber():
                     top_mem_user_str = top_mem_user[0]+f" {top_mem_user[1]*100:.1f}%"
 
                     active_users = ws_status.active_users_in_last_minute
+                    # active_users_top_proc_age = {u:ws_status.users_top_proc_age.get(u,float("nan")) for u in active_users}
+                    active_users_top_proc_age = {u:f"{datetime.timedelta(seconds=int(v))}" if u in active_users else "-" for u,v in ws_status.users_top_proc_age.items()}
 
                     if age > 120:
                         status = "🟨"
@@ -532,7 +544,7 @@ class Subscriber():
                                  "top_vram_users" : top_vram_users_str,
                                  "daily_load" : ws_status.daily_activity_ratio(),
                                  "weekly_load" : ws_status.weekly_activity_ratio(),
-                                 "active_users" : active_users
+                                 "active_users" : [u+"["+str(active_users_top_proc_age.get(u, "-"))+"]" for u in active_users]
                                  }
                     if age > 300:
                         all_stats = {k:float("nan") if isinstance(v, (int, float, str)) else "???" for k,v in all_stats.items()}
@@ -542,7 +554,7 @@ class Subscriber():
                     lines.append({"hostname": sys, "status": f"🟧 ", "age": age})
             lines.sort(key=lambda x: str(x['hostname']))
         tf = time.monotonic()
-        print(f"Held lock for {(tf-t0)*1000:.3f}ms")
+        # print(f"Held lock for {(tf-t0)*1000:.3f}ms")
         return lines
 
     def get_activity_img(self, ws_name, date : datetime.date | None = None):

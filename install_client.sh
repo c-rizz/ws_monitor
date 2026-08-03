@@ -49,7 +49,7 @@ if [[ "$start_at_boot" == "y" || "$start_at_boot" == "Y" ]]; then
     sudo cp config/wsmonitor_publisher.service /etc/systemd/system/
     sudo systemctl daemon-reload
     sudo systemctl enable wsmonitor_publisher.service
-    sudo systemctl start wsmonitor_publisher.service
+    sudo systemctl restart wsmonitor_publisher.service
     echo "Service enabled and started. Should be already running."
 else
     echo "Not starting publisher at boot."

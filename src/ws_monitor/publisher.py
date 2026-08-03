@@ -12,6 +12,23 @@ import subprocess
 import shutil
 from pprint import pprint
 
+def resolve_username(proc: psutil.Process) -> str:
+    """Return proc's owner, resolving rootless-Docker's remapped UIDs to the host user."""
+    username = proc.username()
+    if not username.isdigit():
+        return username
+    # A purely-numeric result means the UID has no /etc/passwd entry, which happens
+    # when the process lives in a rootless-Docker user namespace (subuid remap).
+    # The containerd-shim ancestor still runs as the real host user, so walk up to find it.
+    for ancestor in proc.parents():
+        try:
+            ancestor_user = ancestor.username()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+        if not ancestor_user.isdigit():
+            return ancestor_user
+    return username
+
 pynvml.nvmlInit()
 def get_gpus_infos():
     deviceCount = pynvml.nvmlDeviceGetCount()
@@ -26,7 +43,7 @@ def get_gpus_infos():
         for proc in procs:
             try:
                 procinfos = psutil.Process(proc.pid)
-                user = procinfos.username()
+                user = resolve_username(procinfos)
                 proc_creation_time = procinfos.create_time()
                 top_proc_name = procinfos.name()
             except psutil.NoSuchProcess as e:

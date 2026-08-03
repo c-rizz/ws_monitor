@@ -335,7 +335,9 @@ class WorkstationStatus:
         gpus = self.data["gpu"]
         for gpu in gpus.values():
             for user, vram_ratio in gpu["memratio_by_user"].items():
-                if vram_ratio > 0.05:
+                tot_mem_bytes = gpu["memory_size_bytes"]
+                mem_usage_bytes = {u:r*tot_mem_bytes for u,r in gpu["memratio_by_user"].items()}
+                if vram_ratio > 0.1 or mem_usage_bytes.get(user, 0) > 1024**3:
                     active_users.add(user)
                     t = time.time()
                     if "top_users_proc" in gpu and user in gpu["top_users_proc"]:
@@ -547,7 +549,8 @@ class Subscriber():
                                  "active_users" : [u+"["+str(active_users_top_proc_age.get(u, "-"))+"]" for u in active_users]
                                  }
                     if age > 300:
-                        all_stats = {k:float("nan") if isinstance(v, (int, float, str)) else "???" for k,v in all_stats.items()}
+                        preserved_keys = {"hostname", "status", "age", "ip"}
+                        all_stats = {k:(v if k in preserved_keys else (float("nan") if isinstance(v, (int, float, str)) else "???")) for k,v in all_stats.items()}
                     lines.append(all_stats)
                 except Exception as e:
                     print(f"Error interpreting data from {data['hostname']}: {e}")

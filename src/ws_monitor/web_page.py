@@ -19,9 +19,9 @@ from ws_monitor.subscriber import Subscriber
 # start with: gunicorn --bind 0.0.0.0:9422 adarl.utils.dbg.web_video_streamer_app:app
 
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 CONFIG_ENV_VAR = "WSMONITOR_WEB_CONFIG"
-DEFAULT_WEB_CONFIG_PATH = os.path.join(BASE_DIR, "config", "web_config.yaml")
+DEFAULT_CONFIG_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config"), "ws_monitor")
+DEFAULT_WEB_CONFIG_PATH = os.path.join(DEFAULT_CONFIG_DIR, "web_config.yaml")
 SECRET_KEY_ENV_VAR = "WSMONITOR_FLASK_SECRET_KEY"
 
 
@@ -68,6 +68,7 @@ def get_flask_secret_key() -> str:
 
 
 WEB_CONFIG_PATH = os.environ.get(CONFIG_ENV_VAR, DEFAULT_WEB_CONFIG_PATH)
+print(f"web_config: reading config from {WEB_CONFIG_PATH}")
 WEB_CONFIG = load_web_config(WEB_CONFIG_PATH)
 USER_ALIAS_LOOKUP = build_user_alias_lookup(WEB_CONFIG.get("user_aliases", {}))
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), ".local", "share", "ws_monitor", "data")

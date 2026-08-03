@@ -451,6 +451,23 @@ class Subscriber():
             for line in lines:
                 for i in range(len(line)):
                     line[i] = line[i].ljust(widths[i])
+            DISK_COL = 8
+            for line, all_stats in zip(lines, stats_list):
+                if len(line) <= DISK_COL:
+                    continue
+                disk_usage_ratio = all_stats.get("disk_usage_ratio", float("nan"))
+                if np.isnan(disk_usage_ratio):
+                    continue
+                if disk_usage_ratio > 0.99:
+                    color = "red"
+                elif disk_usage_ratio > 0.95:
+                    color = "orange"
+                else:
+                    continue
+                cell = line[DISK_COL]
+                visible = cell.rstrip()
+                trailing = cell[len(visible):]
+                line[DISK_COL] = f'<span style="color:{color};">{visible}</span>{trailing}'
             for line in lines:
                 l0_length = len(line[0])
                 l0_strip = line[0].strip()
@@ -506,8 +523,10 @@ class Subscriber():
                     cpu_stats = data["cpu"]
                     disk = data.get("disk",None)
                     if disk is not None:
-                        disk_str = str([f"{disk['stats']['disk_usage_ratio']*100:.2f}%" for gpu in gpus.values()])
+                        disk_usage_ratio = disk['stats']['disk_usage_ratio']
+                        disk_str = str([f"{disk_usage_ratio*100:.2f}%" for gpu in gpus.values()])
                     else:
+                        disk_usage_ratio = float("nan")
                         disk_str = "N/A"
                     top_mem_user = max(cpu_stats["memratio_by_user"].items(), key=lambda user_ratio: user_ratio[1])
                     top_mem_user_str = top_mem_user[0]+f" {top_mem_user[1]*100:.1f}%"
@@ -542,6 +561,7 @@ class Subscriber():
                                  "GPU" : str(gpus_usage),
                                  "VRAM" : str(vrams_usage),
                                  "DISK" : disk_str,
+                                 "disk_usage_ratio" : disk_usage_ratio,
                                  "top_mem_user" : top_mem_user_str,
                                  "top_vram_users" : top_vram_users_str,
                                  "daily_load" : ws_status.daily_activity_ratio(),

@@ -33,3 +33,6 @@ wsmon-publisher = "ws_monitor.publisher:main"
 wsmon-server = "ws_monitor.web_page:main"
 [tool.setuptools]
 script-files = ["src/ws_monitor/wsmon_run_flask.sh", "src/ws_monitor/wsmon_run_gunicorn.sh","src/ws_monitor/wsmon_run_flask_restarting.sh"]
+
+[tool.setuptools.package-data]
+ws_monitor = ["templates/*", "static/*"]

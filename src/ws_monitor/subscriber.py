@@ -10,12 +10,27 @@ import os
 import numpy as np
 import datetime
 import pickle
+from typing import Any, Dict
 
 def strike(text):
     result = ''
     for c in text:
         result = result + c + '\u0336'
     return result
+
+def format_age(seconds: float) -> str:
+    if seconds != seconds:  # nan
+        return "nan"
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes = seconds/60
+    if minutes < 60:
+        return f"{minutes:.1f}m"
+    hours = minutes/60
+    if hours < 24:
+        return f"{hours:.1f}h"
+    days = hours/24
+    return f"{days:.1f}d"
 
 bright_green = np.array([56, 235, 56])
 pastel_green = np.array((89, 220, 111))
@@ -263,11 +278,18 @@ class WorkstationStatus:
         self._last_received_seqnum = float("-inf")
 
         os.makedirs(self._data_folder, exist_ok=True)
+        # Placeholder contact info, used verbatim until (if ever) update_data() is
+        # called with real data. Lets a workstation we have saved data for but
+        # haven't heard from this run still show up (as disconnected) in the recap,
+        # instead of only appearing once it publishes again. See Subscriber._load_known_workstations.
+        self.data: Dict[str, Any] = {"hostname": hostname}
+        self.last_contact = 0.0
         try:
             with open(self._stats_file) as f:
-                conf = yaml.load(f, Loader=yaml.CLoader)
+                conf = yaml.safe_load(f)
                 self._monitored_secs = conf["monitored_secs"]
                 self._active_secs = conf["active_secs"]
+            self.last_contact = os.path.getmtime(self._stats_file)
         except FileNotFoundError as e:
             print(f"could not open file {self._stats_file}, will be created")
             pass
@@ -390,9 +412,25 @@ class Subscriber():
         self.data_folder = data_folder
         self._user_alias_lookup: dict[str, str] = user_alias_lookup or {}
         print(f"Using folder {os.path.abspath(data_folder)}")
+        self._load_known_workstations()
         print(f"Listening on '{server}'")
         if autostart:
             self._start_receiver()
+
+    def _load_known_workstations(self):
+        """Pre-populate self.stats from previously-saved per-workstation data, so a
+        workstation we have history for still shows up (as disconnected) right after
+        a restart, instead of only reappearing once it publishes again."""
+        if not os.path.isdir(self.data_folder):
+            return
+        for hostname in os.listdir(self.data_folder):
+            ws_data_folder = os.path.join(self.data_folder, hostname)
+            if not os.path.isdir(ws_data_folder):
+                continue
+            try:
+                self.stats[hostname] = WorkstationStatus(hostname, data_folder=ws_data_folder)
+            except Exception as e:
+                print(f"Could not load saved data for workstation '{hostname}': {e}")
 
     def _start_receiver(self):
         worker = threading.Thread(  target = self.receiver_worker,
@@ -419,7 +457,7 @@ class Subscriber():
         for all_stats in stats_list:
             try:
                 lines.append(  [f"{all_stats['hostname']}",
-                                f"[{all_stats['age']:.1f}s]",
+                                f"[{format_age(all_stats['age'])}]",
                                 f" {all_stats['status']}",
                                 f" IP:{all_stats['ip']} ",
                                 f" CPU:{all_stats['CPU']} ",
@@ -436,7 +474,7 @@ class Subscriber():
                                 ])
             except KeyError as e:
                 lines.append(  [f"{all_stats['hostname']}",
-                                f"[{all_stats['age']:.1f}s]",
+                                f"[{format_age(all_stats['age'])}]",
                                 f" {all_stats['status']}"])
         
         if len(lines)>0:
@@ -486,7 +524,7 @@ class Subscriber():
         s += "<table>\n"
         for l in stats_list:
             l["hostname"] = self._make_link(l["hostname"])
-            l["age"] = f"{l['age']:.1f}s"
+            l["age"] = format_age(l["age"])
             l["daily_load"] = f"{l['daily_load']*100:.1f}%"
             l["weekly_load"] = f"{l['weekly_load']*100:.1f}%"
         columns = stats_list[0].keys()

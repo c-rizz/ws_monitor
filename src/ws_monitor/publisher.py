@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import datetime
+import os
 import time
 import argparse
 import zmq
@@ -8,7 +9,6 @@ import json
 import pynvml
 import socket
 import psutil
-import subprocess
 import shutil
 from pprint import pprint
 
@@ -67,14 +67,6 @@ def get_gpus_infos():
                                 "top_users_proc" : top_users_proc}
     return gpu_infos
 
-def get_memory_usage_by_user_smem():
-    return {"None":0.0}
-    out = subprocess.check_output("sudo smem -up -c \"user pss\" -s pss", shell=True).decode("utf-8")
-    lines_user_pss = list(reversed([l.split() for l in out.splitlines()]))[:-1]
-    print(f"{lines_user_pss}")
-    user_pssratio = {l[0]: float(l[1][:-1])/100 for l in lines_user_pss}
-    return user_pssratio
-
 def get_memory_usage_by_user_psutil():
     user_memory = {}
 
@@ -127,12 +119,29 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--server", default=None, type=str, help="Address of the aggregator server.")
     ap.add_argument("--config", default=None, type=str, help="Config file to loadConfig file to load")
+    ap.add_argument("--install-service", action="store_true",
+                     help="Install and enable a systemd --user service that runs this publisher on boot, then exit.")
     args = vars(ap.parse_args())
+
+    if args.pop("install_service"):
+        import shlex
+        import shutil as shutil_mod
+        import sys
+        from ws_monitor.service_install import install_user_service
+        exec_parts = [shutil_mod.which("wsmon-publisher") or sys.argv[0]]
+        if args["server"] is not None:
+            exec_parts += ["--server", args["server"]]
+        if args["config"] is not None:
+            exec_parts += ["--config", os.path.abspath(args["config"])]
+        install_user_service(service_name="wsmonitor-publisher",
+                              description="WSMonitor Publisher",
+                              exec_start=shlex.join(exec_parts))
+        return
 
     if args["config"] is not None:
         import yaml
         with open(args["config"]) as f:
-            conf = yaml.load(f, Loader=yaml.CLoader)
+            conf = yaml.safe_load(f)
             conf.update({k:v for k,v in args.items() if v is not None})
             args = conf
     if args["server"] is None:

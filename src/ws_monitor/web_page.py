@@ -260,12 +260,30 @@ with app.app_context():
 def main():
   import argparse
   ap = argparse.ArgumentParser()
-  ap.add_argument("--gunicorn", action="store_true", help="Serve with gunicorn instead of Flask's dev server.")
+  ap.add_argument("--dev-server", action="store_true",
+                   help="Serve with Flask's built-in dev server instead of gunicorn. Not recommended outside development.")
   ap.add_argument("--port", type=int, default=9423, help="Port to listen on.")
-  ap.add_argument("--workers", type=int, default=1, help="Number of gunicorn workers (only used with --gunicorn).")
+  ap.add_argument("--workers", type=int, default=1, help="Number of gunicorn workers (only used without --dev-server).")
+  ap.add_argument("--install-service", action="store_true",
+                   help="Install and enable a systemd --user service that runs this server on boot, then exit.")
   args = ap.parse_args()
 
-  if args.gunicorn:
+  if args.install_service:
+    import shlex
+    import shutil
+    import sys
+    from ws_monitor.service_install import install_user_service
+    exec_parts = [shutil.which("wsmon-server") or sys.argv[0], "--port", str(args.port)]
+    if args.dev_server:
+      exec_parts.append("--dev-server")
+    else:
+      exec_parts += ["--workers", str(args.workers)]
+    install_user_service(service_name="wsmonitor-server",
+                          description="WSMonitor Web Server",
+                          exec_start=shlex.join(exec_parts))
+    return
+
+  if not args.dev_server:
     from gunicorn.app.base import BaseApplication
 
     def post_fork(server, worker):

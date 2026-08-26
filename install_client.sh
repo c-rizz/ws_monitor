@@ -3,21 +3,22 @@
 # Get folder where the install script is located
 cd $(dirname $0)
 dname=$(realpath $(dirname $0))
-sudo apt update && sudo apt install -y smem python3-venv
-rm -rf virtualenv
-python3 -m venv virtualenv
-. virtualenv/bin/activate
-if [[ "$(which python3)" != "$dname/virtualenv/bin/python3" ]]; then
-    echo "Failed to enter venv."
+
+if ! python3 -m pipx --version >/dev/null 2>&1; then
+    echo "pipx not found, installing it for the current user (no sudo needed)..."
+    python3 -m pip install --user pipx || python3 -m pip install --user pipx --break-system-packages
+fi
+python3 -m pipx ensurepath >/dev/null
+export PATH="$HOME/.local/bin:$PATH"
+
+echo "Installing ws_monitor with pipx..."
+python3 -m pipx install --force "$dname"
+
+if ! command -v wsmon-publisher >/dev/null 2>&1; then
+    echo "wsmon-publisher not found on PATH after installing."
+    echo "Open a new shell (so it picks up ~/.local/bin) and re-run this script."
     exit 1
 fi
-
-echo "Created venv at $(which python3)" 
-pip install --upgrade pip
-pip install --upgrade setuptools
-pip install --upgrade wheel
-# pip install -r "${dname}/requirements.txt"
-pip install .
 
 echo ""
 echo "What is the server address? (default: 'localhost:9452')"
@@ -26,31 +27,19 @@ if [[ -z "$server_address" ]]; then
     server_address="localhost:9452"
 fi
 
-mkdir -p config
-sed -e "s#localhost:9452#$server_address#g" default_pub_config.yaml > config/publisher_config.yaml
-if [[ ! -f config/publisher_config.yaml ]]; then
-    echo "Error: Failed to create config/publisher_config.yaml"
+config_dir="$HOME/.config/ws_monitor"
+mkdir -p "$config_dir"
+sed -e "s#localhost:9452#$server_address#g" default_pub_config.yaml > "$config_dir/publisher_config.yaml"
+if [[ ! -f "$config_dir/publisher_config.yaml" ]]; then
+    echo "Error: Failed to create $config_dir/publisher_config.yaml"
     exit 1
 fi
-sed -e "s#PACKAGE_FOLDER#$dname#g" wsmonitor_publisher.service.base > config/wsmonitor_publisher.service
-if [[ ! -f config/wsmonitor_publisher.service ]]; then
-    echo "Error: Failed to create config/wsmonitor_publisher.service"
-    exit 1
-fi
-sed -i -e "s#USER#$USER#g" config/wsmonitor_publisher.service
-if [[ ! -f config/wsmonitor_publisher.service ]]; then
-    echo "Error: Failed to create config/wsmonitor_publisher.service"
-    exit 1
-fi
+echo "Wrote $config_dir/publisher_config.yaml"
 
 echo "Do you want to start the publisher at startup? (y/N)"
 read -p "> " -r start_at_boot
 if [[ "$start_at_boot" == "y" || "$start_at_boot" == "Y" ]]; then
-    sudo cp config/wsmonitor_publisher.service /etc/systemd/system/
-    sudo systemctl daemon-reload
-    sudo systemctl enable wsmonitor_publisher.service
-    sudo systemctl restart wsmonitor_publisher.service
-    echo "Service enabled and started. Should be already running."
+    wsmon-publisher --config "$config_dir/publisher_config.yaml" --install-service
 else
-    echo "Not starting publisher at boot."
+    echo "Not starting publisher at boot. Run it manually with: wsmon-publisher --config $config_dir/publisher_config.yaml"
 fi

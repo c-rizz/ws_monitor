@@ -41,51 +41,85 @@ dark_gray    = np.array([189, 172, 164])
 almost_white = np.array([230, 226, 225])
 
 class UsageStats:
+    _MINUTES_PER_YEAR_BUFFER = 60*24*366  # sized for leap years; the tail is simply unused otherwise
+
     def __init__(self, filepath : str, wsname : str):
-        # self._weekly_minute_activity = np.zeros(60*24*7, dtype = np.bool8) # For each minute a flag for when the computer was active
-        # self._weekly_minute_monitored    = np.zeros(60*24*7, dtype = np.bool8) # For each minute a flag for when the computer was being monitored
         self._wsname = wsname
-        self._yearly_minute_activity = np.zeros(60*24*366, dtype = bool) # For each minute a flag for when the computer was active
-        self._yearly_minute_monitored    = np.zeros(60*24*366, dtype = bool) # For each minute a flag for when the computer was being monitored
-        self._yearly_minute_active_users = np.zeros(60*24*366, dtype = np.uint16) # Active users for each minute (mask)
+        # One set of arrays per calendar year, allocated lazily. Keeping years separate (rather
+        # than one buffer reused every year) means a slot that's never been written this year is
+        # unambiguously "not monitored" - no risk of showing last year's leftover data for a slot
+        # the clock hasn't reached yet this year, and no special-casing needed for weeks that span
+        # a Dec/Jan boundary since we just read from two years' buffers.
+        self._years : dict[int, dict[str, np.ndarray]] = {}
 
         self._users : dict[str,int] = {}
 
         filepath = filepath+".npz" if not filepath.endswith(".npz") else filepath
         self._filepath = filepath
         self._last_save = 0
-        self._last_save_minute = 0
+        self._last_save_minute = -1
+        self._last_save_year = -1
         self._save_freq_sec = 60
         self._load()
 
     def get_timestamp_idx(self, t : float):
         dt = datetime.datetime.fromtimestamp(t)
         return int((t-datetime.datetime.fromisoformat(f"{dt.year}-01-01").timestamp())/60)
-    
-    def get_datetime_idx(self, t : datetime.datetime):        
+
+    def get_datetime_idx(self, t : datetime.datetime):
         return int((t.timestamp()-datetime.datetime.fromisoformat(f"{t.year}-01-01").timestamp())/60)
+
+    def _get_year_arrays(self, year : int) -> dict[str, np.ndarray]:
+        if year not in self._years:
+            self._years[year] = {
+                "act": np.zeros(self._MINUTES_PER_YEAR_BUFFER, dtype = bool),
+                "mon": np.zeros(self._MINUTES_PER_YEAR_BUFFER, dtype = bool),
+                "users": np.zeros(self._MINUTES_PER_YEAR_BUFFER, dtype = np.uint16),
+            }
+        return self._years[year]
+
+    def _get_range(self, start_dt : datetime.datetime, end_dt : datetime.datetime):
+        """Returns (activity, monitored, users) arrays covering [start_dt, end_dt), stitching
+        across a calendar-year boundary if the range crosses one. Minutes in a year we have no
+        data for (not yet monitored, or simply never allocated) come back as False/0."""
+        total_minutes = int((end_dt - start_dt).total_seconds() // 60)
+        activity = np.zeros(total_minutes, dtype=bool)
+        monitored = np.zeros(total_minutes, dtype=bool)
+        users = np.zeros(total_minutes, dtype=np.uint16)
+        cursor = start_dt
+        pos = 0
+        while pos < total_minutes:
+            year = cursor.year
+            idx = self.get_datetime_idx(cursor)
+            minutes_left_in_year = int((datetime.datetime(year+1,1,1) - cursor).total_seconds() // 60)
+            take = min(minutes_left_in_year, total_minutes - pos)
+            if year in self._years:
+                arrs = self._years[year]
+                activity[pos:pos+take] = arrs["act"][idx:idx+take]
+                monitored[pos:pos+take] = arrs["mon"][idx:idx+take]
+                users[pos:pos+take] = arrs["users"][idx:idx+take]
+            pos += take
+            cursor += datetime.timedelta(minutes=take)
+        return activity, monitored, users
 
     def update(self, is_active : bool, active_users : list[str] = []):
         dt = datetime.datetime.now()
         idx_minute = self.get_datetime_idx(dt)
         # print(f"{self._wsname}: usage update")
-        if idx_minute == self._last_save_minute:
+        if idx_minute == self._last_save_minute and dt.year == self._last_save_year:
             return
         for u in active_users:
             if u not in self._users:
                 self._users[u] = len(self._users)
         active_user_ids = [self._users[u] for u in active_users]
         self._last_save_minute = idx_minute
+        self._last_save_year = dt.year
 
-        minute_from_year_start = idx_minute
-        self._yearly_minute_activity[minute_from_year_start] = is_active
-        self._yearly_minute_monitored[minute_from_year_start] = 1
-        self._yearly_minute_active_users[minute_from_year_start] = sum([1 << idx for idx in active_user_ids if idx < 16])
-        # print(f"{self._wsname}: usage update logging, is_active = {is_active}, at idx {minute_from_year_start}")
-
-        # minute_from_week_start = dt.weekday()*24*60 + dt.hour*60 + dt.minute
-        # self._weekly_minute_activity[minute_from_week_start] = is_active
-        # self._weekly_minute_monitored[minute_from_week_start] = 1
+        arrs = self._get_year_arrays(dt.year)
+        arrs["act"][idx_minute] = is_active
+        arrs["mon"][idx_minute] = 1
+        arrs["users"][idx_minute] = sum([1 << idx for idx in active_user_ids if idx < 16])
+        # print(f"{self._wsname}: usage update logging, is_active = {is_active}, at idx {idx_minute} of {dt.year}")
 
         if time.monotonic() - self._last_save > 60:
             self._save()
@@ -94,16 +128,8 @@ class UsageStats:
     def _save(self):
         os.makedirs(os.path.dirname(self._filepath), exist_ok=True)
         tmpfile = self._filepath+".tmp.pkl"
-        # np.savez(tmpfile,
-        #          yearly_act = self._yearly_minute_activity,
-        #          yearly_mon = self._yearly_minute_monitored,
-        #          yearly_users = self._yearly_minute_active_users,
-        #          users = self._users
-        #          )
         with open(tmpfile,"wb") as f:
-            pickle.dump(dict(yearly_act = self._yearly_minute_activity,
-                                yearly_mon = self._yearly_minute_monitored,
-                                yearly_users = self._yearly_minute_active_users,
+            pickle.dump(dict(years = self._years,
                                 users = self._users),
                         file=f)
         os.replace(tmpfile, self._filepath)
@@ -111,36 +137,57 @@ class UsageStats:
 
     def _load(self):
         try:
-            # d = np.load(self._filepath, allow_pickle=True)
             with open(self._filepath,"rb") as f:
                 d = pickle.load(f)
-            # if "weekly_act" in d:
-            #     self._weekly_minute_activity = d["weekly_act"]
-            # if "weekly_mon" in d:
-            #     self._weekly_minute_monitored = d["weekly_mon"]
-            self._yearly_minute_activity = d["yearly_act"]
-            self._yearly_minute_monitored = d["yearly_mon"]
-            self._yearly_minute_active_users = d["yearly_users"]
-            self._users = d["users"]
+            self._users = d.get("users", {})
+            if "years" in d:
+                self._years = d["years"]
+            else:
+                self._years = {}
+                self._migrate_legacy_format(d)
             print(f"{self._wsname}: loaded activity from file at {os.path.abspath(self._filepath)}")
         except OSError as e:
             print(f"could not open file {self._filepath}, will be created")
             pass
 
+    def _migrate_legacy_format(self, d : dict):
+        """Splits data from the old single-fixed-buffer format (reused every year, with no year
+        tag at all) into per-year buffers, using pure calendar position rather than any recorded
+        epoch (an intermediate, now-abandoned fix briefly added one; it's ignored here and every
+        legacy file is treated the same way regardless of whether it has that field).
+
+        The split is fully deterministic: a slot holds whatever was *most recently* written to
+        it, so the part of the buffer from Jan 1 up to right now was necessarily last written
+        during the current pass through the year - i.e. it's genuinely this year's data. The
+        remainder (later in the year, not reached yet) hasn't been touched since the previous
+        pass through that same calendar position, so it must still hold last year's value."""
+        old_act = d.get("yearly_act")
+        old_mon = d.get("yearly_mon")
+        old_users = d.get("yearly_users")
+        if old_act is None:
+            return
+        now = datetime.datetime.now()
+        now_idx = self.get_datetime_idx(now)
+
+        this_year = self._get_year_arrays(now.year)
+        this_year["act"][:now_idx+1] = old_act[:now_idx+1]
+        this_year["mon"][:now_idx+1] = old_mon[:now_idx+1]
+        this_year["users"][:now_idx+1] = old_users[:now_idx+1]
+
+        last_year = self._get_year_arrays(now.year - 1)
+        last_year["act"][now_idx+1:] = old_act[now_idx+1:]
+        last_year["mon"][now_idx+1:] = old_mon[now_idx+1:]
+        last_year["users"][now_idx+1:] = old_users[now_idx+1:]
+
+        migrated_minutes = int(np.count_nonzero(old_mon))
+        print(f"{self._wsname}: migrated legacy usage history into {now.year} (elapsed part) "
+              f"and {now.year-1} (remainder) - {migrated_minutes} monitored minutes total")
+
     def get_week_image(self, start_date : datetime.date):
         # print(f"Generating week image for {self._wsname} starting at {start_date}")
         weekstart_dt = datetime.datetime.combine(start_date, datetime.datetime.min.time())
-        weekstart_idx = self.get_datetime_idx(weekstart_dt)
-        weekend_idx = weekstart_idx+7*24*60
-        week_activity   = self._yearly_minute_activity[weekstart_idx:weekend_idx]
-        week_monitoring = self._yearly_minute_monitored[weekstart_idx:weekend_idx]
-        # print(f"weekstart_dt = {weekstart_dt}")
-        # print(f"isodate = {isodate}")
-        # print(f"_yearly_minute_activity.shape = {self._yearly_minute_activity.shape}")
-        # print(f"plotting from = {weekstart_idx} to {weekend_idx}")
-        # print(f"week_activity.shape = {week_activity.shape}")
-        # print(f"week active minutes = {np.count_nonzero(week_activity)}")
-        # print(f"week monitored minutes = {np.count_nonzero(week_activity)}")
+        weekend_dt = weekstart_dt + datetime.timedelta(days=7)
+        week_activity, week_monitoring, _ = self._get_range(weekstart_dt, weekend_dt)
         img = np.ones(shape=week_activity.shape+(3,), dtype=np.uint8)
         img *= 255
         img[week_activity]     = punch_red
@@ -155,17 +202,15 @@ class UsageStats:
             img[i] = dark_gray
             img[i+r-1] = dark_gray
         return img
-    
+
 
     def get_week_users_images(self):
         dt = datetime.datetime.now()
         row_height = 20
-        
+
         weekstart_dt = datetime.datetime.combine(dt.date()-datetime.timedelta(days=6), datetime.datetime.min.time())
-        weekstart_idx = self.get_datetime_idx(weekstart_dt)
-        weekend_idx = weekstart_idx+7*24*60
-        week_monitored = self._yearly_minute_monitored[weekstart_idx:weekend_idx]
-        week_users = self._yearly_minute_active_users[weekstart_idx:weekend_idx]
+        weekend_dt = weekstart_dt + datetime.timedelta(days=7)
+        _, week_monitored, week_users = self._get_range(weekstart_dt, weekend_dt)
 
         img_mon = np.full(fill_value=255,shape=week_monitored.shape+(3,), dtype=np.uint8)
         img_mon[np.logical_not(week_monitored)] = light_gray
@@ -185,20 +230,14 @@ class UsageStats:
             user_images[uname] = img_user
 
         return user_images
-    
-    
-    
+
+
+
     def get_week_recap(self):
         dt = datetime.datetime.now()
-        # time_from_year_start = t-datetime.datetime.fromisoformat(f"{dt.year}-01-01").timestamp()
-        # minute_from_year_start = int(time_from_year_start/60)
-        
         weekstart_dt = datetime.datetime.combine(dt.date()-datetime.timedelta(days=6), datetime.datetime.min.time())
-        weekstart_idx = self.get_datetime_idx(weekstart_dt)
-        weekend_idx = weekstart_idx+7*24*60
-        week_activity   = self._yearly_minute_activity[weekstart_idx:weekend_idx]
-        week_monitoring = self._yearly_minute_monitored[weekstart_idx:weekend_idx]
-        week_users = self._yearly_minute_active_users[weekstart_idx:weekend_idx]
+        weekend_dt = weekstart_dt + datetime.timedelta(days=7)
+        week_activity, week_monitoring, week_users = self._get_range(weekstart_dt, weekend_dt)
 
         ret_strs = []
         for day in range(7):
@@ -220,13 +259,10 @@ class UsageStats:
 
     def get_usage_minutes_per_user(self, from_datetime: datetime.datetime, to_datetime: datetime.datetime) -> dict[str, int]:
         """Return the per-user active minute counts for the last 7 days (inclusive)."""
-        # Align to midnight six days ago so we cover exactly seven 24h blocks ending today.
-        start_idx = max(self.get_datetime_idx(from_datetime), 0)
-        end_idx = min(self.get_datetime_idx(to_datetime), self._yearly_minute_active_users.shape[0])
-        if start_idx >= end_idx:
+        if from_datetime >= to_datetime:
             return {}
 
-        week_users = self._yearly_minute_active_users[start_idx:end_idx]
+        _, _, week_users = self._get_range(from_datetime, to_datetime)
         minutes_by_user: dict[str, int] = {}
         for name, idx in self._users.items():
             if idx >= 16:
@@ -239,13 +275,10 @@ class UsageStats:
         return minutes_by_user
 
     def get_usage_ratio(self, start_datetime : datetime.datetime, end_datetime : datetime.datetime):
-        start_idx = max(self.get_datetime_idx(start_datetime),0)
-        end_idx = min(self.get_datetime_idx(end_datetime), self._yearly_minute_activity.shape[0])
-        if start_idx >= end_idx:
+        if start_datetime >= end_datetime:
             return float("nan")
-        # print(f"Calculating usage ratio from {start_datetime} (idx {start_idx}) to {end_datetime} (idx {end_idx})")
-        activity   = self._yearly_minute_activity[start_idx:end_idx]
-        monitored = self._yearly_minute_monitored[start_idx:end_idx]
+        # print(f"Calculating usage ratio from {start_datetime} to {end_datetime}")
+        activity, monitored, _ = self._get_range(start_datetime, end_datetime)
         active_monitored = np.logical_and(activity, monitored)
         monitored_minutes = np.count_nonzero(monitored)
         active_monitored_minutes = np.count_nonzero(active_monitored)
@@ -481,7 +514,7 @@ class Subscriber():
             cols = 0
             for line in lines:
                 if isinstance(line, list):
-                    cols = len(line)
+                    cols = max(cols, len(line))
             widths = [1]*cols
             for line in lines:
                 for i,col in enumerate(line):

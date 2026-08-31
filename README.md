@@ -1,6 +1,6 @@
 # WORKSTATION MONITOR
 
-*See at a glance which of your lab's workstations are free, who's using what, and how busy each GPU/CPU is — no agents to babysit — no root required, easy to set up.*
+*See at a glance which of your lab's workstations are free, who's using what, and how busy each GPU/CPU is, no root required, easy to set up.*
 
 ![WSMonitor screenshot](example_images/wsmonitor.png)
 

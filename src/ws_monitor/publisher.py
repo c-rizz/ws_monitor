@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 import datetime
+import logging
 import os
+import pprint
 import time
 import argparse
 import zmq
@@ -10,7 +12,8 @@ import pynvml
 import socket
 import psutil
 import shutil
-from pprint import pprint
+
+logger = logging.getLogger(__name__)
 
 def resolve_username(proc: psutil.Process) -> str:
     """Return proc's owner, resolving rootless-Docker's remapped UIDs to the host user."""
@@ -47,7 +50,7 @@ def get_gpus_infos():
                 proc_creation_time = procinfos.create_time()
                 top_proc_name = procinfos.name()
             except psutil.NoSuchProcess as e:
-                print(f"Error getting process info for pid {proc.pid}")
+                logger.warning(f"Error getting process info for pid {proc.pid}")
                 user = "???"
             if user not in user_mem_usageratio:
                 user_mem_usageratio[user] = 0.0
@@ -107,7 +110,7 @@ def get_ip(target_host: str = "10.254.254.254"):
         s.connect((target_host.split(":")[0], 1))
         ip = s.getsockname()[0]
     except Exception as e:
-        print(f"Error getting IP address: {type(e)}: {e}")
+        logger.warning(f"Error getting IP address: {type(e)}: {e}")
         ip = 'N/A'
     finally:
         s.close()
@@ -116,6 +119,7 @@ def get_ip(target_host: str = "10.254.254.254"):
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(name)s: %(message)s")
     ap = argparse.ArgumentParser()
     ap.add_argument("--server", default=None, type=str, help="Address of the aggregator server.")
     ap.add_argument("--config", default=None, type=str, help="Config file to loadConfig file to load")
@@ -147,8 +151,7 @@ def main() -> None:
     if args["server"] is None:
         args["server"] = "tcp://127.0.0.1:9452"
 
-    pprint(f"Publisher config:")
-    pprint(args)
+    logger.info(f"Publisher config:\n{pprint.pformat(args)}")
 
     system_state_topic = b'system_stats'
     pub_period_sec = 1.0
@@ -157,7 +160,7 @@ def main() -> None:
     s.connect(args["server"])
 
 
-    print(f"Starting broadcast on topic '{system_state_topic}'")
+    logger.info(f"Starting broadcast on topic '{system_state_topic}'")
     time.sleep(1.0)
 
     session_id = int(time.time()*1000) # millisecond time
@@ -183,15 +186,15 @@ def main() -> None:
             if sleep_duration > 0:
                 time.sleep(sleep_duration)
             else:
-                print(f"Warning: publisher is too slow, took {tf-t0:.3f}s)")
+                logger.warning(f"Publisher is too slow, took {tf-t0:.3f}s")
             seq_num += 1
         except KeyboardInterrupt:
-            print(f"Received SIGINT")
+            logger.info("Received SIGINT")
             break
 
-    print("Waiting for message queues to flush...")
+    logger.info("Waiting for message queues to flush...")
     time.sleep(0.5)
-    print("Exiting")
+    logger.info("Exiting")
 
 
 if __name__ == "__main__":

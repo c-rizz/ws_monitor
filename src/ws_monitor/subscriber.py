@@ -4,6 +4,7 @@ import zmq
 import argparse
 import threading
 import json
+import logging
 import yaml
 import time
 import os
@@ -11,6 +12,8 @@ import numpy as np
 import datetime
 import pickle
 from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 def strike(text):
     result = ''
@@ -145,9 +148,9 @@ class UsageStats:
             else:
                 self._years = {}
                 self._migrate_legacy_format(d)
-            print(f"{self._wsname}: loaded activity from file at {os.path.abspath(self._filepath)}")
+            logger.info(f"{self._wsname}: loaded activity from file at {os.path.abspath(self._filepath)}")
         except OSError as e:
-            print(f"could not open file {self._filepath}, will be created")
+            logger.info(f"could not open file {self._filepath}, will be created")
             pass
 
     def _migrate_legacy_format(self, d : dict):
@@ -180,8 +183,8 @@ class UsageStats:
         last_year["users"][now_idx+1:] = old_users[now_idx+1:]
 
         migrated_minutes = int(np.count_nonzero(old_mon))
-        print(f"{self._wsname}: migrated legacy usage history into {now.year} (elapsed part) "
-              f"and {now.year-1} (remainder) - {migrated_minutes} monitored minutes total")
+        logger.info(f"{self._wsname}: migrated legacy usage history into {now.year} (elapsed part) "
+                    f"and {now.year-1} (remainder) - {migrated_minutes} monitored minutes total")
 
     def get_week_image(self, start_date : datetime.date):
         # print(f"Generating week image for {self._wsname} starting at {start_date}")
@@ -217,7 +220,7 @@ class UsageStats:
 
         user_images : dict[str,np.ndarray]= {}
         for uname,uid in self._users.items():
-            print(f"{uname} : {uid}")
+            logger.debug(f"{uname} : {uid}")
             week_user_active = np.bitwise_and(week_users, 1<<uid) != 0
             img_user = img_mon.copy()
             img_user[week_user_active] = punch_red
@@ -324,7 +327,7 @@ class WorkstationStatus:
                 self._active_secs = conf["active_secs"]
             self.last_contact = os.path.getmtime(self._stats_file)
         except FileNotFoundError as e:
-            print(f"could not open file {self._stats_file}, will be created")
+            logger.info(f"could not open file {self._stats_file}, will be created")
             pass
         self._usage_stats = UsageStats(data_folder+"/full_stats.npy", wsname=self.hostname)
 
@@ -343,7 +346,7 @@ class WorkstationStatus:
         is_old_session = new_data_sessionid is not None and self._last_received_sessionid is not None and new_data_sessionid < self._last_received_sessionid
         is_old_seqnum = new_data_seqnum is not None and self._last_received_seqnum is not None and new_data_seqnum <= self._last_received_seqnum
         if is_old_session or is_old_seqnum:
-            print(f"Ignoring old data for {self.hostname}: session_id {new_data_sessionid} (last {self._last_received_sessionid}), seq_num {new_data_seqnum} (last {self._last_received_seqnum})")            
+            logger.debug(f"Ignoring old data for {self.hostname}: session_id {new_data_sessionid} (last {self._last_received_sessionid}), seq_num {new_data_seqnum} (last {self._last_received_seqnum})")
             return self
         self._last_received_sessionid = new_data_sessionid
         self._last_received_seqnum = new_data_seqnum
@@ -439,14 +442,32 @@ class Subscriber():
                         data_folder : str = "./data",
                         user_alias_lookup: dict[str, str] | None = None,
                         autostart : bool = True):
-        self.data_rlock = threading.RLock()
-        self.stats : dict[str,WorkstationStatus] = {}
         self._server_url = server
         self.data_folder = data_folder
         self._user_alias_lookup: dict[str, str] = user_alias_lookup or {}
-        print(f"Using folder {os.path.abspath(data_folder)}")
+        logger.info(f"Using folder {os.path.abspath(data_folder)}")
+        logger.info(f"Listening on '{server}'")
+        self.reload(autostart=autostart)
+
+    def reload(self, autostart : bool = True):
+        """Re-initializes in place: drops all in-memory state and reloads every known
+        workstation fresh from disk, then (by default) restarts the ZMQ receiver.
+
+        This exists so a long-lived caller can force a fresh read of current disk state
+        without discarding this object and everyone's references to it - see web_page.py's
+        post_fork, which calls this instead of constructing a new Subscriber and rebinding
+        the module-level name, precisely because a freshly (re)spawned gunicorn worker
+        needs its `app.subscriber` to reflect what's on disk now, not whatever it was at
+        the time of the fork.
+
+        Only meant to be called on an instance whose receiver isn't currently running
+        (e.g. right after __init__ with autostart=False, or before any prior reload()) -
+        it doesn't stop an already-running receiver thread first, so calling it while one
+        is active would leave two threads racing to bind the same ZMQ socket.
+        """
+        self.data_rlock = threading.RLock()
+        self.stats : dict[str,WorkstationStatus] = {}
         self._load_known_workstations()
-        print(f"Listening on '{server}'")
         if autostart:
             self._start_receiver()
 
@@ -463,7 +484,7 @@ class Subscriber():
             try:
                 self.stats[hostname] = WorkstationStatus(hostname, data_folder=ws_data_folder)
             except Exception as e:
-                print(f"Could not load saved data for workstation '{hostname}': {e}")
+                logger.warning(f"Could not load saved data for workstation '{hostname}': {e}")
 
     def _start_receiver(self):
         worker = threading.Thread(  target = self.receiver_worker,
@@ -586,65 +607,68 @@ class Subscriber():
                 age = time.time()-ws_status.last_contact
                 try:
                     data = ws_status.data
-                    gpus = data["gpu"]
-                    top_vram_users_str = ""
-                    for gpu in gpus.values():
-                        top_vram_user = max(gpu["memratio_by_user"].items(), key=lambda user_ratio: user_ratio[1]) if len(gpu["memratio_by_user"])>0 else ("None",0.0)
-                        top_vram_users_str += top_vram_user[0]+f" {top_vram_user[1]*100:.1f}%"
-                    cpu_stats = data["cpu"]
-                    disk = data.get("disk",None)
-                    if disk is not None:
-                        disk_usage_ratio = disk['stats']['disk_usage_ratio']
-                        disk_str = str([f"{disk_usage_ratio*100:.2f}%" for gpu in gpus.values()])
+                    if len(data)<=1:
+                        all_stats = {"hostname": sys, "status": f"🟧 ", "age": age, "ip": "N/A"}
                     else:
-                        disk_usage_ratio = float("nan")
-                        disk_str = "N/A"
-                    top_mem_user = max(cpu_stats["memratio_by_user"].items(), key=lambda user_ratio: user_ratio[1])
-                    top_mem_user_str = top_mem_user[0]+f" {top_mem_user[1]*100:.1f}%"
+                        gpus = data["gpu"]
+                        top_vram_users_str = ""
+                        for gpu in gpus.values():
+                            top_vram_user = max(gpu["memratio_by_user"].items(), key=lambda user_ratio: user_ratio[1]) if len(gpu["memratio_by_user"])>0 else ("None",0.0)
+                            top_vram_users_str += top_vram_user[0]+f" {top_vram_user[1]*100:.1f}%"
+                        cpu_stats = data["cpu"]
+                        disk = data.get("disk",None)
+                        if disk is not None:
+                            disk_usage_ratio = disk['stats']['disk_usage_ratio']
+                            disk_str = str([f"{disk_usage_ratio*100:.2f}%" for gpu in gpus.values()])
+                        else:
+                            disk_usage_ratio = float("nan")
+                            disk_str = "N/A"
+                        top_mem_user = max(cpu_stats["memratio_by_user"].items(), key=lambda user_ratio: user_ratio[1])
+                        top_mem_user_str = top_mem_user[0]+f" {top_mem_user[1]*100:.1f}%"
 
-                    active_users = ws_status.active_users_in_last_minute
-                    # active_users_top_proc_age = {u:ws_status.users_top_proc_age.get(u,float("nan")) for u in active_users}
-                    active_users_top_proc_age = {u:f"{datetime.timedelta(seconds=int(v))}" if u in active_users else "-" for u,v in ws_status.users_top_proc_age.items()}
+                        active_users = ws_status.active_users_in_last_minute
+                        # active_users_top_proc_age = {u:ws_status.users_top_proc_age.get(u,float("nan")) for u in active_users}
+                        active_users_top_proc_age = {u:f"{datetime.timedelta(seconds=int(v))}" if u in active_users else "-" for u,v in ws_status.users_top_proc_age.items()}
 
-                    if age > 120:
-                        status = "🟨"
-                    elif len(active_users)>0:
-                        status = "🟥"
-                    else:
-                        status = "🟩"
-                    hostname = str(data['hostname'])
-                    gpus_usage = [f"{gpu['stats']['gpu_proc_utilization_ratio']:.0f}%" for gpu in gpus.values()]
-                    if len(gpus_usage) == 1:
-                        gpus_usage = gpus_usage[0]
-                    elif len(gpus_usage) == 0:
-                        gpus_usage = "N/A"
-                    vrams_usage = [f"{gpu['stats']['gpu_mem_fill_ratio']*100:.2f}%" for gpu in gpus.values()]
-                    if len(vrams_usage) == 1:
-                        vrams_usage = vrams_usage[0]
-                    elif len(vrams_usage) == 0:
-                        vrams_usage = "N/A"
-                    all_stats = {"hostname" : hostname,
-                                 "age" : age,
-                                 "status" : status,
-                                 "ip" : data.get('ip', 'N/A'),
-                                 "CPU" : f"{cpu_stats['cpu_utilization_ratio']*100:.0f}%",
-                                 "RAM" : f"{cpu_stats['cpu_mem_fill_ratio']*100:.2f}%",
-                                 "GPU" : str(gpus_usage),
-                                 "VRAM" : str(vrams_usage),
-                                 "DISK" : disk_str,
-                                 "disk_usage_ratio" : disk_usage_ratio,
-                                 "top_mem_user" : top_mem_user_str,
-                                 "top_vram_users" : top_vram_users_str,
-                                 "daily_load" : ws_status.daily_activity_ratio(),
-                                 "weekly_load" : ws_status.weekly_activity_ratio(),
-                                 "active_users" : [u+"["+str(active_users_top_proc_age.get(u, "-"))+"]" for u in active_users]
-                                 }
-                    if age > 300:
-                        preserved_keys = {"hostname", "status", "age", "ip"}
-                        all_stats = {k:(v if k in preserved_keys else (float("nan") if isinstance(v, (int, float, str)) else "???")) for k,v in all_stats.items()}
+                        if age > 120:
+                            status = "🟨"
+                        elif len(active_users)>0:
+                            status = "🟥"
+                        else:
+                            status = "🟩"
+                        hostname = str(data['hostname'])
+                        gpus_usage = [f"{gpu['stats']['gpu_proc_utilization_ratio']:.0f}%" for gpu in gpus.values()]
+                        if len(gpus_usage) == 1:
+                            gpus_usage = gpus_usage[0]
+                        elif len(gpus_usage) == 0:
+                            gpus_usage = "N/A"
+                        vrams_usage = [f"{gpu['stats']['gpu_mem_fill_ratio']*100:.2f}%" for gpu in gpus.values()]
+                        if len(vrams_usage) == 1:
+                            vrams_usage = vrams_usage[0]
+                        elif len(vrams_usage) == 0:
+                            vrams_usage = "N/A"
+                        all_stats = {"hostname" : hostname,
+                                    "age" : age,
+                                    "status" : status,
+                                    "ip" : data.get('ip', 'N/A'),
+                                    "CPU" : f"{cpu_stats['cpu_utilization_ratio']*100:.0f}%",
+                                    "RAM" : f"{cpu_stats['cpu_mem_fill_ratio']*100:.2f}%",
+                                    "GPU" : str(gpus_usage),
+                                    "VRAM" : str(vrams_usage),
+                                    "DISK" : disk_str,
+                                    "disk_usage_ratio" : disk_usage_ratio,
+                                    "top_mem_user" : top_mem_user_str,
+                                    "top_vram_users" : top_vram_users_str,
+                                    "daily_load" : ws_status.daily_activity_ratio(),
+                                    "weekly_load" : ws_status.weekly_activity_ratio(),
+                                    "active_users" : [u+"["+str(active_users_top_proc_age.get(u, "-"))+"]" for u in active_users]
+                                    }
+                        if age > 300:
+                            preserved_keys = {"hostname", "status", "age", "ip"}
+                            all_stats = {k:(v if k in preserved_keys else (float("nan") if isinstance(v, (int, float, str)) else "???")) for k,v in all_stats.items()}
                     lines.append(all_stats)
                 except Exception as e:
-                    print(f"Error interpreting data from {data['hostname']}: {e}")
+                    logger.debug(f"Error interpreting data from {data['hostname']}: {e}")
                     lines.append({"hostname": sys, "status": f"🟧 ", "age": age})
             lines.sort(key=lambda x: str(x['hostname']))
         tf = time.monotonic()
@@ -710,7 +734,7 @@ class Subscriber():
         ctx = zmq.Context()
         s = ctx.socket(zmq.SUB)
         s.bind(bind_to)
-        print(f"Listening on {bind_to}")
+        logger.info(f"Listening on {bind_to}")
 
         s.setsockopt(zmq.SUBSCRIBE, system_state_topic)
         try:
@@ -722,7 +746,7 @@ class Subscriber():
                 except KeyboardInterrupt:
                     raise
                 except Exception as e:
-                    print(f"receiver_worker: error processing message: {e}")
+                    logger.error(f"receiver_worker: error processing message: {e}")
         except KeyboardInterrupt:
             pass
 

@@ -1,10 +1,11 @@
 import os
 import threading
 import secrets
+import logging
 import math
 import time
 import flask
-from flask import Flask, render_template, redirect, request, url_for, Response, jsonify
+from flask import Flask, render_template, redirect, request, url_for, Response, jsonify, current_app
 # import flask_login
 import cv2
 import numpy as np
@@ -18,6 +19,8 @@ from ws_monitor.subscriber import Subscriber
 
 # start with: gunicorn --bind 0.0.0.0:9422 adarl.utils.dbg.web_video_streamer_app:app
 
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 CONFIG_ENV_VAR = "WSMONITOR_WEB_CONFIG"
 DEFAULT_CONFIG_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config"), "ws_monitor")
@@ -27,13 +30,13 @@ SECRET_KEY_ENV_VAR = "WSMONITOR_FLASK_SECRET_KEY"
 
 def load_web_config(config_path: str) -> dict:
   if not os.path.isfile(config_path):
-    print(f"web_config: no config file found at {config_path}, using defaults")
+    logger.info(f"web_config: no config file found at {config_path}, using defaults")
     return {}
   try:
     with open(config_path, "r", encoding="utf-8") as config_file:
       return yaml.safe_load(config_file) or {}
   except (OSError, yaml.YAMLError) as exc:
-    print(f"web_config: failed to load {config_path}: {exc}")
+    logger.warning(f"web_config: failed to load {config_path}: {exc}")
     return {}
 
 
@@ -63,12 +66,12 @@ def get_flask_secret_key() -> str:
   if secret:
     return secret
   secret = secrets.token_hex(32)
-  print(f"flask_secret: generated ephemeral key because {SECRET_KEY_ENV_VAR} is unset")
+  logger.warning(f"flask_secret: generated ephemeral key because {SECRET_KEY_ENV_VAR} is unset")
   return secret
 
 
 WEB_CONFIG_PATH = os.environ.get(CONFIG_ENV_VAR, DEFAULT_WEB_CONFIG_PATH)
-print(f"web_config: reading config from {WEB_CONFIG_PATH}")
+logger.info(f"web_config: reading config from {WEB_CONFIG_PATH}")
 WEB_CONFIG = load_web_config(WEB_CONFIG_PATH)
 USER_ALIAS_LOOKUP = build_user_alias_lookup(WEB_CONFIG.get("user_aliases", {}))
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), ".local", "share", "ws_monitor", "data")
@@ -96,7 +99,7 @@ def index():
 </head>  
 <body>
  <h1>Workstations Status</h1>
-{subscriber.get_stats_recap_table()}
+{current_app.subscriber.get_stats_recap_table()}
 </body>
 </html>'''
 
@@ -116,7 +119,8 @@ def global_stats():
     with _global_stats_cache_lock:
       cache_age = now - _global_stats_cache["timestamp"]
       if cache_age >= _global_stats_cache_ttl_sec:
-        _global_stats_cache["payload"] = subscriber.get_stats_recap()
+        logger.debug(f"Refreshing global stats cache (age {cache_age:.2f}s)")
+        _global_stats_cache["payload"] = current_app.subscriber.get_stats_recap()
         _global_stats_cache["timestamp"] = now
       stats = _global_stats_cache["payload"]
     return Response(stats, mimetype="text/plain")
@@ -124,7 +128,7 @@ def global_stats():
 @app.route("/user_usage_percent_<int:duration_sec>")
 def user_usage_percent(duration_sec):
   duration = duration_sec  # duration in seconds
-  usage_minutes = subscriber.get_total_usage_minutes(since_seconds_ago=duration)
+  usage_minutes = current_app.subscriber.get_total_usage_minutes(since_seconds_ago=duration)
   total_minutes = duration // 60
   usage_percent = {user: (minutes / total_minutes) * 100 for user, minutes in usage_minutes.items() if total_minutes > 0}
   usage_percent = {k: v for k, v in usage_percent.items() if v >= 0.1}
@@ -155,7 +159,7 @@ def user_usage_percent(duration_sec):
 
 @app.route("/total_usage_ratio_<int:duration_sec>")
 def total_usage_ratio(duration_sec):
-  ratio = subscriber.get_total_usage_ratio(since_seconds_ago=duration_sec)
+  ratio = current_app.subscriber.get_total_usage_ratio(since_seconds_ago=duration_sec)
   if math.isnan(ratio):
     ratio_payload = None
   else:
@@ -173,7 +177,7 @@ def request_resources():
   _resource_requests.append(entry)
   if len(_resource_requests) > 10:
     del _resource_requests[:-10]
-  print(f"Resource request received from {user} at {timestamp}")
+  logger.info(f"Resource request received from {user} at {timestamp}")
   return jsonify({"status": "ok"})
 
 @app.route("/request_resources", methods=["GET"])
@@ -196,7 +200,7 @@ def server_boot_id():
 
 @app.route("/<wsname>/weekimage_history_<date_yyyymmdd>")
 def ws_weekimage_history_page(wsname, date_yyyymmdd):
-  img = subscriber.get_activity_img(wsname, date = datetime.strptime(date_yyyymmdd, "%Y%m%d").date())
+  img = current_app.subscriber.get_activity_img(wsname, date = datetime.strptime(date_yyyymmdd, "%Y%m%d").date())
   if img is None:
     return f"{wsname} not found"
   data = np.array(cv2.imencode('.png', img)[1]).tobytes()
@@ -205,7 +209,7 @@ def ws_weekimage_history_page(wsname, date_yyyymmdd):
 
 @app.route("/<wsname>/weekimage")
 def ws_weekimage_page(wsname):
-  img = subscriber.get_activity_img(wsname)
+  img = current_app.subscriber.get_activity_img(wsname)
   if img is None:
     return f"{wsname} not found"
   data = np.array(cv2.imencode('.png', img)[1]).tobytes()
@@ -213,7 +217,7 @@ def ws_weekimage_page(wsname):
                   mimetype='image/png')
 
 def get_page_foot():
-  links = [f'<a href="/{wsname}">{wsname}</a>' for wsname in subscriber.get_ws_names()]
+  links = [f'<a href="/{wsname}">{wsname}</a>' for wsname in current_app.subscriber.get_ws_names()]
   return f"""
 <br>
 {'<br> '.join(links)}
@@ -223,7 +227,7 @@ def get_page_foot():
 
 @app.route("/<wsname>/users")
 def ws_weekuserimage_page(wsname):
-  imgs : dict[str,np.ndarray] | None = subscriber.get_user_activity_images(wsname)
+  imgs : dict[str,np.ndarray] | None = current_app.subscriber.get_user_activity_images(wsname)
   if imgs is None:
     return f"{wsname} not found"
   
@@ -239,23 +243,23 @@ def ws_weekuserimage_page(wsname):
   return render_template("ws_users.html",
                         wsname=wsname,
                         user_images=user_images,
-                        ws_names=subscriber.get_ws_names())
+                        ws_names=current_app.subscriber.get_ws_names())
 
 
 @app.route("/<wsname>/recap")
 def ws_details_page(wsname):
-  weekly_recap = subscriber.get_activity_text(wsname)
+  weekly_recap = current_app.subscriber.get_activity_text(wsname)
   if weekly_recap is None:
     weekly_recap = f"{wsname} not found"
   weekly_recap = "\n"+weekly_recap
-  return render_template("ws_details.html", 
-                        wsname=wsname, 
+  return render_template("ws_details.html",
+                        wsname=wsname,
                         weekly_recap=weekly_recap,
-                        ws_names=subscriber.get_ws_names())
+                        ws_names=current_app.subscriber.get_ws_names())
 
 
 with app.app_context():
-  subscriber = Subscriber(user_alias_lookup=USER_ALIAS_LOOKUP, data_folder=DATA_DIR, autostart=False)
+  app.subscriber = Subscriber(user_alias_lookup=USER_ALIAS_LOOKUP, data_folder=DATA_DIR, autostart=False)
 
 def main():
   import argparse
@@ -287,21 +291,28 @@ def main():
     from gunicorn.app.base import BaseApplication
 
     def post_fork(server, worker):
-        # ZMQ socket was never bound in the master (autostart=False), so we
-        # can safely bind fresh here in the worker after fork.
-        subscriber._start_receiver()
+        # `app.subscriber` was already built once at module-import time, in the master,
+        # before main() (and thus this whole function) ever runs - gunicorn's own
+        # preload_app setting doesn't change that, since our load() below just
+        # returns the already-existing `app`, it never re-imports anything. Left
+        # alone, every worker - including a replacement spawned after a crash or
+        # timeout - would inherit that one frozen master-time snapshot via fork(),
+        # rather than picking up from current disk state. Reloading it fresh here,
+        # in the worker, after every fork, is what actually fixes that: a respawn
+        # then loses at most one save interval instead of everything recorded since
+        # the server was first started.
+        app.subscriber.reload(autostart=True)
 
     class GunicornApp(BaseApplication):
       def load_config(self):
         self.cfg.set("bind", f"0.0.0.0:{args.port}")
         self.cfg.set("workers", 1)  # only one process can hold the ZMQ socket
-        self.cfg.set("preload_app", True)
         self.cfg.set("post_fork", post_fork)
       def load(self):
         return app
     GunicornApp().run()
   else:
-    subscriber._start_receiver()
+    app.subscriber._start_receiver()
     app.run(debug=False, host="0.0.0.0", port=args.port)
 
 if __name__ == '__main__':

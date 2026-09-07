@@ -2,7 +2,7 @@
 
 *See at a glance which of your lab's workstations are free, who's using what, and how busy each GPU/CPU is, no root required, easy to set up.*
 
-![WSMonitor screenshot](example_images/wsmonitor.png)
+![WSMonitor screenshot](example_images/wsmonitor.gif)
 
 You have a bunch of linux workstations in your lab and you want to keep track of which ones are free and who is using which?
 You don't want to install complex tools and have something that is minimal and easy to install?

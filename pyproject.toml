@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ws_monitor"
-version = "0.0.1"
+version = "0.0.2"
 authors = [
   { name="Carlo Rizzardo", email="cr.git.mail@gmail.com" },
 ]
@@ -32,8 +32,9 @@ dependencies = [
 [project.scripts]
 wsmon-publisher = "ws_monitor.publisher:main"
 wsmon-server = "ws_monitor.web_page:main"
+wsmon-setup-quota = "ws_monitor.quota_setup:main"
 [tool.setuptools]
 script-files = ["src/ws_monitor/wsmon_run_flask.sh", "src/ws_monitor/wsmon_run_gunicorn.sh","src/ws_monitor/wsmon_run_flask_restarting.sh"]
 
 [tool.setuptools.package-data]
-ws_monitor = ["templates/*", "static/*"]
+ws_monitor = ["templates/*", "static/*", "setup_quota_monitoring.sh"]

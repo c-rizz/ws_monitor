@@ -127,7 +127,7 @@ def resolve_uid(uid: int) -> str:
     return f"#{uid}"
 
 def get_disk_usage_by_user(dump_file: str = QUOTA_DUMP_FILE):
-    """Per-user disk usage from the `repquota -u -p` dump that setup_quota_monitoring.sh's
+    """Per-user disk usage from the `repquota -u -p` dump that wsmon-setup-quota's
     root cron job keeps refreshed, or None if quota monitoring isn't set up on this machine.
     Reading other users' quota usage needs root (native ext4 quotas or not), hence the dump
     file instead of querying the kernel from this unprivileged process."""
@@ -138,7 +138,11 @@ def get_disk_usage_by_user(dump_file: str = QUOTA_DUMP_FILE):
     except OSError:
         return None
     used_bytes_by_user = {}
+    device = None
     for line in lines:
+        header = re.match(r"\*\*\* Report for user quotas on device (\S+)", line)
+        if header:
+            device = header.group(1)
         # Data rows: <user> <limit flags, e.g. "--"> <blocks used, in KiB> <soft> <hard> <grace> <files used> ...
         fields = line.split()
         if len(fields) < 3 or not re.fullmatch(r"[-+]{2}", fields[1]) or not fields[2].isdigit():
@@ -150,7 +154,12 @@ def get_disk_usage_by_user(dump_file: str = QUOTA_DUMP_FILE):
             if user.startswith("#") and user[1:].isdigit():
                 user = resolve_uid(int(user[1:]))
             used_bytes_by_user[user] = used_bytes_by_user.get(user, 0) + used_kib * 1024
-    return {"timestamp": timestamp, "used_bytes_by_user": used_bytes_by_user}
+    total_bytes = None
+    for partition in psutil.disk_partitions():
+        if partition.device == device:
+            total_bytes = shutil.disk_usage(partition.mountpoint).total
+            break
+    return {"timestamp": timestamp, "used_bytes_by_user": used_bytes_by_user, "total_bytes": total_bytes}
 
 def get_ip(target_host: str = "10.254.254.254"):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

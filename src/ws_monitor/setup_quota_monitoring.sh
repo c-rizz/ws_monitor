@@ -4,7 +4,7 @@
 # world-readable file, so the unprivileged ws_monitor publisher can read per-user
 # disk usage without ever needing sudo itself.
 #
-# Usage: sudo ./setup_quota_monitoring.sh [mountpoint] [interval_minutes]
+# Usage: wsmon-setup-quota [mountpoint] [interval_minutes]   (asks for the sudo password itself)
 #   mountpoint        filesystem to account (default: /)
 #   interval_minutes  how often to refresh the dump, 1-59 (default: 15)
 #
@@ -91,7 +91,7 @@ printf -v q_mp '%q' "$MOUNTPOINT"
 dump_cmd="umask 022; $REPQUOTA -u -p $q_mp > $DUMP_FILE.tmp && mv $DUMP_FILE.tmp $DUMP_FILE"
 
 cat > "$CRON_FILE" <<EOF
-# Installed by ws_monitor's setup_quota_monitoring.sh: refreshes per-user disk usage for the publisher.
+# Installed by ws_monitor's wsmon-setup-quota: refreshes per-user disk usage for the publisher.
 SHELL=/bin/sh
 */$INTERVAL_MIN * * * * root $dump_cmd
 EOF

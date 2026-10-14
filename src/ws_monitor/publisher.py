@@ -14,6 +14,7 @@ import pynvml
 import socket
 import psutil
 import shutil
+from importlib.metadata import version, PackageNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -223,6 +224,10 @@ def main() -> None:
     time.sleep(1.0)
 
     session_id = int(time.time()*1000) # millisecond time
+    try:
+        ws_monitor_version = version("ws_monitor")
+    except PackageNotFoundError:
+        ws_monitor_version = None
     seq_num = 0
 
     while True:
@@ -230,6 +235,7 @@ def main() -> None:
             t0 = time.monotonic()
             data = {}
             data["session_id"] = session_id
+            data["version"] = ws_monitor_version
             data["seq_num"] = seq_num
             data["hostname"] = socket.gethostname()
             data["ip"] = get_ip()

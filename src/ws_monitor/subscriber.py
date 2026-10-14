@@ -701,6 +701,14 @@ class Subscriber():
         else:
             return None
 
+    def get_publisher_version(self, ws_name):
+        """ws_monitor version the workstation's publisher reports, or None if unknown (older
+        publishers don't send it, or not heard from yet)."""
+        with self.data_rlock:
+            if ws_name not in self.stats:
+                return None
+            return self.stats[ws_name].data.get("version")
+
     def get_disk_usage_by_user(self, ws_name):
         """Latest per-user disk usage reported by the workstation's publisher, restricted to
         users in its activity history (so system accounts and unknown UIDs are left out), or

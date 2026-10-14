@@ -269,6 +269,7 @@ def ws_details_page(wsname):
                         weekly_recap=weekly_recap,
                         disk_usage_text=disk_usage_text,
                         disk_usage_time=disk_usage_time,
+                        publisher_version=current_app.subscriber.get_publisher_version(wsname),
                         ws_names=current_app.subscriber.get_ws_names())
 
 

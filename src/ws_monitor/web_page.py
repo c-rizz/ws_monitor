@@ -246,15 +246,34 @@ def ws_weekuserimage_page(wsname):
                         ws_names=current_app.subscriber.get_ws_names())
 
 
+def format_bytes(n: float) -> str:
+  for unit in ("B", "KiB", "MiB", "GiB"):
+    if n < 1024:
+      return f"{n:.1f} {unit}"
+    n /= 1024
+  return f"{n:.1f} TiB"
+
 @app.route("/<wsname>/recap")
 def ws_details_page(wsname):
   weekly_recap = current_app.subscriber.get_activity_text(wsname)
   if weekly_recap is None:
     weekly_recap = f"{wsname} not found"
   weekly_recap = "\n"+weekly_recap
+
+  disk_users = current_app.subscriber.get_disk_usage_by_user(wsname)
+  disk_usage_text = None
+  disk_usage_time = None
+  if disk_users is not None:
+    rows = sorted(disk_users["used_bytes_by_user"].items(), key=lambda item: item[1], reverse=True)
+    name_width = max((len(user) for user, _ in rows), default=0)
+    disk_usage_text = "\n".join(f"{user.ljust(name_width)}  {format_bytes(used):>10}" for user, used in rows)
+    disk_usage_time = datetime.fromtimestamp(disk_users["timestamp"]).strftime("%Y-%m-%d %H:%M")
+
   return render_template("ws_details.html",
                         wsname=wsname,
                         weekly_recap=weekly_recap,
+                        disk_usage_text=disk_usage_text,
+                        disk_usage_time=disk_usage_time,
                         ws_names=current_app.subscriber.get_ws_names())
 
 

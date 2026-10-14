@@ -688,7 +688,15 @@ class Subscriber():
             return self.stats[ws_name].get_usage_stats().get_week_recap()
         else:
             return None
-    
+
+    def get_disk_usage_by_user(self, ws_name):
+        """Latest per-user disk usage reported by the workstation's publisher, or None if it
+        doesn't report any (quota monitoring not set up there, or not heard from yet)."""
+        with self.data_rlock:
+            if ws_name not in self.stats:
+                return None
+            return self.stats[ws_name].data.get("disk_users")
+
     def get_user_activity_images(self, ws_name):
         if ws_name in self.stats:
             return self.stats[ws_name].get_usage_stats().get_week_users_images()

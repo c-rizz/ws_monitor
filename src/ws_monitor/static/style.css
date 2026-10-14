@@ -120,7 +120,8 @@ h3 {
 
 /* Stats display */
 #stats-pre,
-.user-usage-card pre {
+.user-usage-card pre,
+.disk-usage-pre {
   background-color: var(--code-bg);
   color: var(--code-text);
   padding: 1.5rem;

@@ -46,6 +46,16 @@ wsmon-publisher --server tcp://<server-address>:9452 --install-service
 
 The second command registers `wsmon-publisher` as a systemd `--user` service the same way as above (no sudo needed).
 
+### Optional: per-user disk usage
+
+To also see how much disk each user occupies (shown on each workstation's Usage Details page), run this once per workstation, from a clone of this repository:
+
+```
+sudo ./setup_quota_monitoring.sh
+```
+
+This one does need root: reading other users' disk usage is restricted by the kernel. The script enables per-user quota accounting on `/` (no limits are set, it is only used for reporting), and installs a root cron job that dumps the usage every 15 minutes to `/var/lib/ws_monitor/quota_dump.txt`, which the publisher reads without any privileges. If the filesystem already uses ext4's native quota feature, it uses that instead. Pass a different mountpoint and interval as arguments if needed, e.g. `sudo ./setup_quota_monitoring.sh /home 30`.
+
 
 ## Configuration
 

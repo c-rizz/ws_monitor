@@ -4,6 +4,7 @@ import datetime
 import logging
 import os
 import pprint
+import re
 import time
 import argparse
 import zmq
@@ -102,6 +103,30 @@ def get_disk_info():
                         "disk_free_size" : free,
                         "disk_usage_ratio" : 1-free/total}}
 
+QUOTA_DUMP_FILE = "/var/lib/ws_monitor/quota_dump.txt"
+
+def get_disk_usage_by_user(dump_file: str = QUOTA_DUMP_FILE):
+    """Per-user disk usage from the `repquota -u -p` dump that setup_quota_monitoring.sh's
+    root cron job keeps refreshed, or None if quota monitoring isn't set up on this machine.
+    Reading other users' quota usage needs root (native ext4 quotas or not), hence the dump
+    file instead of querying the kernel from this unprivileged process."""
+    try:
+        timestamp = os.path.getmtime(dump_file)
+        with open(dump_file) as f:
+            lines = f.readlines()
+    except OSError:
+        return None
+    used_bytes_by_user = {}
+    for line in lines:
+        # Data rows: <user> <limit flags, e.g. "--"> <blocks used, in KiB> <soft> <hard> <grace> <files used> ...
+        fields = line.split()
+        if len(fields) < 3 or not re.fullmatch(r"[-+]{2}", fields[1]) or not fields[2].isdigit():
+            continue
+        used_kib = int(fields[2])
+        if used_kib > 0:
+            used_bytes_by_user[fields[0]] = used_kib * 1024
+    return {"timestamp": timestamp, "used_bytes_by_user": used_bytes_by_user}
+
 def get_ip(target_host: str = "10.254.254.254"):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(0)
@@ -177,6 +202,7 @@ def main() -> None:
             data["gpu"] = get_gpus_infos()
             data["cpu"] = get_cpu_infos()
             data["disk"] = get_disk_info()
+            data["disk_users"] = get_disk_usage_by_user()
 
             msg = json.dumps(data)
             s.send_multipart([system_state_topic, msg.encode("utf8")])

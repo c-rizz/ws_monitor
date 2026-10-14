@@ -72,6 +72,11 @@
   {% endif %}
 </div>
 
+<div class="activity-section">
+  <h2>Monitoring Software</h2>
+  <p>ws_monitor version: {{ publisher_version or "unknown (too old to report it, or not connected)" }}</p>
+</div>
+
 <div class="footer-links">
   {% for ws in ws_names %}
   <a href="/{{ ws }}/recap">{{ ws }}</a>

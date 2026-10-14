@@ -4,6 +4,7 @@ import datetime
 import logging
 import os
 import pprint
+import pwd
 import re
 import time
 import argparse
@@ -105,6 +106,26 @@ def get_disk_info():
 
 QUOTA_DUMP_FILE = "/var/lib/ws_monitor/quota_dump.txt"
 
+def resolve_uid(uid: int) -> str:
+    """Username for a UID, attributing rootless-Docker remapped UIDs (no passwd entry of their
+    own) to the host user whose /etc/subuid range contains them, like resolve_username does
+    for processes."""
+    try:
+        return pwd.getpwuid(uid).pw_name
+    except KeyError:
+        pass
+    try:
+        with open("/etc/subuid") as f:
+            for line in f:
+                parts = line.strip().split(":")
+                if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+                    start, count = int(parts[1]), int(parts[2])
+                    if start <= uid < start + count:
+                        return parts[0]
+    except OSError:
+        pass
+    return f"#{uid}"
+
 def get_disk_usage_by_user(dump_file: str = QUOTA_DUMP_FILE):
     """Per-user disk usage from the `repquota -u -p` dump that setup_quota_monitoring.sh's
     root cron job keeps refreshed, or None if quota monitoring isn't set up on this machine.
@@ -124,7 +145,11 @@ def get_disk_usage_by_user(dump_file: str = QUOTA_DUMP_FILE):
             continue
         used_kib = int(fields[2])
         if used_kib > 0:
-            used_bytes_by_user[fields[0]] = used_kib * 1024
+            # repquota prints "#<uid>" for UIDs it couldn't name
+            user = fields[0]
+            if user.startswith("#") and user[1:].isdigit():
+                user = resolve_uid(int(user[1:]))
+            used_bytes_by_user[user] = used_bytes_by_user.get(user, 0) + used_kib * 1024
     return {"timestamp": timestamp, "used_bytes_by_user": used_bytes_by_user}
 
 def get_ip(target_host: str = "10.254.254.254"):

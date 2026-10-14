@@ -65,6 +65,11 @@ class UsageStats:
         self._save_freq_sec = 60
         self._load()
 
+    @property
+    def users(self) -> list[str]:
+        """Everyone ever recorded as active on this workstation."""
+        return list(self._users)
+
     def get_timestamp_idx(self, t : float):
         dt = datetime.datetime.fromtimestamp(t)
         return int((t-datetime.datetime.fromisoformat(f"{dt.year}-01-01").timestamp())/60)
@@ -690,12 +695,19 @@ class Subscriber():
             return None
 
     def get_disk_usage_by_user(self, ws_name):
-        """Latest per-user disk usage reported by the workstation's publisher, or None if it
-        doesn't report any (quota monitoring not set up there, or not heard from yet)."""
+        """Latest per-user disk usage reported by the workstation's publisher, restricted to
+        users in its activity history (so system accounts and unknown UIDs are left out), or
+        None if it doesn't report any (quota monitoring not set up there, or not heard from yet)."""
         with self.data_rlock:
             if ws_name not in self.stats:
                 return None
-            return self.stats[ws_name].data.get("disk_users")
+            ws_status = self.stats[ws_name]
+            disk_users = ws_status.data.get("disk_users")
+            if disk_users is None:
+                return None
+            known_users = set(ws_status.get_usage_stats().users)
+            return {**disk_users,
+                    "used_bytes_by_user": {u: b for u, b in disk_users["used_bytes_by_user"].items() if u in known_users}}
 
     def get_user_activity_images(self, ws_name):
         if ws_name in self.stats:

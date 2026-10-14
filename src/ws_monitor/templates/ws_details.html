@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ wsname }} Usage Details - Workstation Monitor{% endblock %}
+{% block title %}{{ wsname }} Recap - Workstation Monitor{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -48,7 +48,7 @@
 {% endblock %}
 
 {% block content %}
-<h1>{{ wsname }} Usage Details</h1>
+<h1>{{ wsname }} Recap</h1>
 
 <div class="activity-section">
   <h2>Weekly Activity</h2>
@@ -65,7 +65,7 @@
 <div class="activity-section">
   <h2>Disk Usage by User</h2>
   {% if disk_usage_text is none %}
-  <p>Not available: per-user disk monitoring isn't set up on this workstation (see <code>setup_quota_monitoring.sh</code>).</p>
+  <p>Not available: per-user disk monitoring isn't set up on this workstation (run <code>wsmon-setup-quota</code> there to enable it).</p>
   {% else %}
   <p>As of {{ disk_usage_time }}</p>
   <pre class="disk-usage-pre">{{ disk_usage_text }}</pre>

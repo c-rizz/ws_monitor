@@ -35,6 +35,13 @@ def format_age(seconds: float) -> str:
     days = hours/24
     return f"{days:.1f}d"
 
+def format_bytes(n: float) -> str:
+    for unit in ("B", "KiB", "MiB", "GiB"):
+        if n < 1024:
+            return f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TiB"
+
 bright_green = np.array([56, 235, 56])
 pastel_green = np.array((89, 220, 111))
 bright_red   = np.array([17, 17, 240])

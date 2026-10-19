@@ -2,6 +2,7 @@
 
 import zmq
 import argparse
+import collections
 import threading
 import json
 import logging
@@ -249,28 +250,28 @@ class UsageStats:
 
 
     def get_week_recap(self):
+        """One row per day of the last 7 days: {"date", "monitored_ratio" (of the whole day),
+        "active_ratio" and "user_ratios" {user: ratio} (both of the monitored time, NaN if the
+        day wasn't monitored at all)}."""
         dt = datetime.datetime.now()
         weekstart_dt = datetime.datetime.combine(dt.date()-datetime.timedelta(days=6), datetime.datetime.min.time())
         weekend_dt = weekstart_dt + datetime.timedelta(days=7)
         week_activity, week_monitoring, week_users = self._get_range(weekstart_dt, weekend_dt)
 
-        ret_strs = []
+        rows = []
         for day in range(7):
-            day_minutes = 60*24
+            # Only the part of the day that has already happened can have been monitored (matters for today)
+            elapsed_minutes = int((dt - (weekstart_dt + datetime.timedelta(days=day))).total_seconds() // 60) + 1
+            day_minutes = min(60*24, elapsed_minutes)
             monitored_minutes = np.count_nonzero(week_monitoring[day*60*24:(day+1)*60*24])
             active_minutes =    np.count_nonzero(week_activity[day*60*24:(day+1)*60*24])
             day_users = week_users[day*60*24:(day+1)*60*24]
-            monitored_ratio = monitored_minutes/day_minutes
-            active_ratio = active_minutes/monitored_minutes if monitored_minutes>0 else float("nan")
-            minutes_by_user = {}
-            for name,idx in self._users.items():
-                minutes_by_user[name] = np.count_nonzero(np.bitwise_and(day_users, 1<<idx))
-            minutes_by_user_ratio = {n:m/monitored_minutes if monitored_minutes>0 else float("nan") for n,m in minutes_by_user.items()}
-            daystr =  f"{(weekstart_dt + datetime.timedelta(days=day)).date()}: active {active_ratio*100: 4.0f}% monitored {monitored_ratio*100: 4.0f}% \t"
-            daystr += f"            "+(", ".join(f"{n}:{r*100: 4.0f}%" for n,r in minutes_by_user_ratio.items()))
-            ret_strs.append(daystr)
-        
-        return "\n".join(ret_strs)
+            minutes_by_user = {name: np.count_nonzero(np.bitwise_and(day_users, 1<<idx)) for name, idx in self._users.items()}
+            rows.append({"date": (weekstart_dt + datetime.timedelta(days=day)).date(),
+                         "monitored_ratio": min(1.0, monitored_minutes/day_minutes),
+                         "active_ratio": active_minutes/monitored_minutes if monitored_minutes>0 else float("nan"),
+                         "user_ratios": {n: m/monitored_minutes if monitored_minutes>0 else float("nan") for n, m in minutes_by_user.items()}})
+        return rows
 
     def get_usage_minutes_per_user(self, from_datetime: datetime.datetime, to_datetime: datetime.datetime) -> dict[str, int]:
         """Return the per-user active minute counts for the last 7 days (inclusive)."""
@@ -307,9 +308,16 @@ class UsageStats:
 
 
 class WorkstationStatus:
+    # A user counts as active through CPU alone if they kept at least this many cores busy,
+    # on average, over the last CPU_ACTIVE_WINDOW_SEC (averaged because CPU use is spiky,
+    # unlike the RAM/VRAM a running job holds on to).
+    CPU_ACTIVE_CORES = 2.0
+    CPU_ACTIVE_WINDOW_SEC = 60
+
     def __init__(self, hostname: str,
                  data_folder : str):
         self.hostname = hostname
+        self._cpu_samples : collections.deque[tuple[float, dict[str, float]]] = collections.deque()
         self._last_hour_activities = [0]*3600
         self._last_hour_activities_pos = 0
         self._last_activity_update = time.monotonic()
@@ -416,6 +424,16 @@ class WorkstationStatus:
         cpu_stats = self.data["cpu"]
         for user, ram_ratio in cpu_stats["memratio_by_user"].items():
             if ram_ratio > 0.3 and ram_ratio < cpu_stats["cpu_mem_fill_ratio"]: # there's some bug in the user ram_ratio, exclude it if it doesn't make sense
+                active_users.add(user)
+        now = time.monotonic()
+        self._cpu_samples.append((now, cpu_stats.get("cores_by_user", {})))  # absent from older publishers
+        while self._cpu_samples and now - self._cpu_samples[0][0] > self.CPU_ACTIVE_WINDOW_SEC:
+            self._cpu_samples.popleft()
+        cores_sum_by_user = collections.Counter()
+        for _, cores_by_user in self._cpu_samples:
+            cores_sum_by_user.update(cores_by_user)
+        for user, cores_sum in cores_sum_by_user.items():
+            if cores_sum/len(self._cpu_samples) >= self.CPU_ACTIVE_CORES:
                 active_users.add(user)
         return list(active_users), users_top_proc_age
     
@@ -695,11 +713,19 @@ class Subscriber():
         else:
             return None
         
-    def get_activity_text(self, ws_name):
+    def get_week_recap(self, ws_name):
         if ws_name in self.stats:
             return self.stats[ws_name].get_usage_stats().get_week_recap()
         else:
             return None
+
+    def get_disk_stats(self, ws_name):
+        """Latest whole-disk stats (total/used/free sizes, usage ratio) for the workstation's
+        root filesystem, or None if not heard from yet."""
+        with self.data_rlock:
+            if ws_name not in self.stats:
+                return None
+            return self.stats[ws_name].data.get("disk", {}).get("stats")
 
     def get_publisher_version(self, ws_name):
         """ws_monitor version the workstation's publisher reports, or None if unknown (older

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ wsname }} Recap - Workstation Monitor{% endblock %}
+{% block title %}Recap: {{ wsname }} - Workstation Monitor{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -33,6 +33,41 @@
   .activity-section {
     margin: 2rem 0;
   }
+
+  .table-wrap {
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+
+  .recap-table {
+    border-collapse: collapse;
+    margin: 0 auto;
+    background-color: var(--code-bg);
+    color: var(--code-text);
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.85rem;
+  }
+
+  .recap-table th,
+  .recap-table td {
+    padding: 0.4rem 0.9rem;
+    text-align: right;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+  }
+
+  .recap-table th:first-child,
+  .recap-table td:first-child {
+    text-align: left;
+  }
+
+  .recap-table th {
+    color: var(--primary-color);
+  }
+
+  .recap-table .usage-high { color: #ff5252; }
+  .recap-table .usage-mid  { color: #ffd54f; }
+  .recap-table .usage-low  { color: #6b7280; }
   
   .footer-links {
     margin-top: 3rem;
@@ -48,7 +83,7 @@
 {% endblock %}
 
 {% block content %}
-<h1>{{ wsname }} Recap</h1>
+<h1>Recap: {{ wsname }}</h1>
 
 <div class="activity-section">
   <h2>Weekly Activity</h2>
@@ -57,17 +92,38 @@
     <img class="axis-image" src="{{ url_for('static', filename='24h_axis.svg') }}" alt="24h axis">
   </div>
   
-  <pre id="stats-pre">{{ weekly_recap }}</pre>
+  {% if week_table %}
+  <div class="table-wrap">
+    <table class="recap-table">
+      <thead>
+        <tr>
+          <th>Day</th>
+          <th title="Share of the monitored time in which someone was using it">Active</th>
+          <th title="Share of the day in which the workstation was reporting">Monitored</th>
+          {% for user in week_table.users %}<th title="Share of the monitored time in which {{ user }} was active">{{ user }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in week_table.rows %}
+        <tr>{% for cell in row %}<td class="{{ cell.class }}">{{ cell.text }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p>{{ wsname }} not found</p>
+  {% endif %}
   
   <p style="text-align: center;"><a href="/{{ wsname }}/users" class="button">View User Activity Details</a></p>
 </div>
 
 <div class="activity-section">
-  <h2>Disk Usage by User</h2>
+  <h2>Disk Usage</h2>
+  <p>{{ disk_total_text or "unknown (not connected)" }}</p>
   {% if disk_usage_text is none %}
-  <p>Not available: per-user disk monitoring isn't set up on this workstation (run <code>wsmon-setup-quota</code> there to enable it).</p>
+  <p>Per-user usage not available: per-user disk monitoring isn't set up on this workstation (run <code>wsmon-setup-quota</code> there to enable it).</p>
   {% else %}
-  <p>As of {{ disk_usage_time }}</p>
+  <p>Per-user usage as of {{ disk_usage_time }}:</p>
   <pre class="disk-usage-pre">{{ disk_usage_text }}</pre>
   {% endif %}
 </div>

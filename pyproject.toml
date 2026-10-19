@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ws_monitor"
-version = "0.0.2"
+version = "0.0.3"
 authors = [
   { name="Carlo Rizzardo", email="cr.git.mail@gmail.com" },
 ]

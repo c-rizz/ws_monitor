@@ -93,10 +93,46 @@ def get_memory_usage_by_user_psutil():
     user_memory_percentage = {user: used / total_memory for user, used in user_memory.items()}
     return user_memory_percentage
 
+_prev_cpu_seconds : dict[tuple[int, float], float] = {}  # (pid, create_time) -> cpu seconds at the previous sample
+_prev_cpu_sample : tuple[float, float] | None = None  # (monotonic time, wall time) of the previous sample
+
+def get_cpu_cores_by_user():
+    """Average number of CPU cores each user kept busy since the previous call (empty on the
+    first call). Processes that both start and end between two calls are missed."""
+    global _prev_cpu_seconds, _prev_cpu_sample
+    now_monotonic, now_wall = time.monotonic(), time.time()
+    cpu_seconds_by_user = {}
+    current = {}
+    for proc in psutil.process_iter(attrs=['pid', 'create_time', 'cpu_times']):
+        try:
+            cpu_times = proc.info['cpu_times']
+            if cpu_times is None:
+                continue
+            cpu_seconds = cpu_times.user + cpu_times.system
+            key = (proc.info['pid'], proc.info['create_time'])
+            current[key] = cpu_seconds
+            if key in _prev_cpu_seconds:
+                delta = cpu_seconds - _prev_cpu_seconds[key]
+            elif _prev_cpu_sample is not None and proc.info['create_time'] >= _prev_cpu_sample[1]:
+                delta = cpu_seconds  # started since the previous sample, so all of it is new
+            else:
+                continue
+            if delta > 0:
+                user = resolve_username(proc)
+                cpu_seconds_by_user[user] = cpu_seconds_by_user.get(user, 0.0) + delta
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    elapsed = now_monotonic - _prev_cpu_sample[0] if _prev_cpu_sample is not None else None
+    _prev_cpu_seconds, _prev_cpu_sample = current, (now_monotonic, now_wall)
+    if not elapsed:
+        return {}
+    return {user: seconds/elapsed for user, seconds in cpu_seconds_by_user.items()}
+
 def get_cpu_infos():
     return {    "cpu_utilization_ratio" : psutil.cpu_percent()/100,
                 "cpu_mem_fill_ratio" : psutil.virtual_memory().used / psutil.virtual_memory().total,
-                "memratio_by_user" : get_memory_usage_by_user_psutil()}
+                "memratio_by_user" : get_memory_usage_by_user_psutil(),
+                "cores_by_user" : get_cpu_cores_by_user()}
 
 def get_disk_info():
     total, used, free = shutil.disk_usage("/")

@@ -248,10 +248,23 @@ def ws_weekuserimage_page(wsname):
 
 @app.route("/<wsname>/recap")
 def ws_details_page(wsname):
-  weekly_recap = current_app.subscriber.get_activity_text(wsname)
-  if weekly_recap is None:
-    weekly_recap = f"{wsname} not found"
-  weekly_recap = "\n"+weekly_recap
+  def cell(text, css_class=""):
+    return {"text": text, "class": css_class}
+  def usage_class(ratio):
+    return "usage-high" if ratio > 0.9 else "usage-mid" if ratio > 0.5 else "usage-low" if ratio < 0.05 else ""
+  def monitored_class(ratio):
+    return "usage-high" if ratio < 0.99 else ""
+  def pct(ratio, css_class_for=usage_class):
+    if math.isnan(ratio):
+      return cell("–")
+    return cell(f"{ratio*100:.0f}%", css_class_for(ratio))
+  week_table = None
+  week_rows = current_app.subscriber.get_week_recap(wsname)
+  if week_rows is not None:
+    users = list(week_rows[0]["user_ratios"])
+    week_table = {"users": users,
+                  "rows": [[cell(row["date"].strftime("%a %Y-%m-%d")), pct(row["active_ratio"]), pct(row["monitored_ratio"], monitored_class),
+                            *(pct(row["user_ratios"][u]) for u in users)] for row in week_rows]}
 
   disk_users = current_app.subscriber.get_disk_usage_by_user(wsname)
   disk_usage_text = None
@@ -264,9 +277,18 @@ def ws_details_page(wsname):
                                 for user, used in rows)
     disk_usage_time = datetime.fromtimestamp(disk_users["timestamp"]).strftime("%Y-%m-%d %H:%M")
 
+  disk_stats = current_app.subscriber.get_disk_stats(wsname)
+  disk_total_text = None
+  if disk_stats is not None:
+    total = disk_stats["disk_total_size"]
+    used = total - disk_stats["disk_free_size"]  # same basis as the main page's disk %
+    disk_total_text = (f"{format_bytes(used)} used of {format_bytes(total)} ({disk_stats['disk_usage_ratio']*100:.1f}%), "
+                       f"{format_bytes(disk_stats['disk_free_size'])} free")
+
   return render_template("ws_details.html",
+                        disk_total_text=disk_total_text,
                         wsname=wsname,
-                        weekly_recap=weekly_recap,
+                        week_table=week_table,
                         disk_usage_text=disk_usage_text,
                         disk_usage_time=disk_usage_time,
                         publisher_version=current_app.subscriber.get_publisher_version(wsname),

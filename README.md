@@ -46,15 +46,7 @@ wsmon-publisher --server tcp://<server-address>:9452 --install-service
 
 The second command registers `wsmon-publisher` as a systemd `--user` service the same way as above (no sudo needed).
 
-### Optional: per-user disk usage
-
-To also see how much disk each user occupies (shown on each workstation's Recap page), run this once per workstation (it comes with the same pipx install as the publisher):
-
-```
-wsmon-setup-quota
-```
-
-This one does need root, and will ask for your sudo password: reading other users' disk usage is restricted by the kernel. It enables per-user quota accounting on `/` (no limits are set, it is only used for reporting), and installs a root cron job that dumps the usage every 15 minutes to `/var/lib/ws_monitor/quota_dump.txt`, which the publisher reads without any privileges. If the filesystem already uses ext4's native quota feature, it uses that instead. Pass a different mountpoint and interval as arguments if needed, e.g. `wsmon-setup-quota /home 30`.
+To also monitor per-user disk usage, see [Per-user disk usage](#per-user-disk-usage-optional) below (this one needs root).
 
 
 ## Configuration
@@ -92,6 +84,16 @@ server: "tcp://monitoring-host:9452"
 ```
 
 After modifying the config, restart the workstation publisher so the new settings take effect: `systemctl --user restart wsmonitor-publisher` if you installed it as a service (see Installation above), or just re-run `wsmon-publisher --config <path>` otherwise.
+
+#### Per-user disk usage (optional)
+
+To also see how much disk each user occupies (shown on each workstation's Recap page), run this once per workstation (it comes with the same pipx install as the publisher):
+
+```
+wsmon-setup-quota
+```
+
+This one does need root, and will ask for your sudo password: reading other users' disk usage is restricted by the kernel. It enables per-user quota accounting on `/` (no limits are set, it is only used for reporting), and installs a root cron job that dumps the usage every 15 minutes to `/var/lib/ws_monitor/quota_dump.txt`, which the publisher reads without any privileges. If the filesystem already uses ext4's native quota feature, it uses that instead. Pass a different mountpoint and interval as arguments if needed, e.g. `wsmon-setup-quota /home 30`.
 
 
 ## License

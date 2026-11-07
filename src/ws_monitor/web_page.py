@@ -80,10 +80,38 @@ SERVER_BOOT_ID = secrets.token_hex(8)
 
 app = Flask(__name__)
 app.secret_key = get_flask_secret_key()
+app.demo_anonymizer = None  # a DemoAnonymizer when running with --demo
 _resource_requests : list[dict] = []
 _global_stats_cache_lock = threading.Lock()
 _global_stats_cache_ttl_sec = 1.0
 _global_stats_cache = {"timestamp": 0.0, "payload": ""}
+
+def demo_text(text: str) -> str:
+  """Anonymizes text in demo mode. Anything padded with spaces must go through this before
+  being padded, since fake names don't have the same length as the real ones."""
+  anonymizer = current_app.demo_anonymizer
+  return text if anonymizer is None else anonymizer.anonymize(text)
+
+@app.url_value_preprocessor
+def demo_prepare_request(endpoint, values):
+  anonymizer = current_app.demo_anonymizer
+  if anonymizer is None:
+    return
+  subscriber = current_app.subscriber
+  # Real people first, so that they're the ones getting the fake names if the list runs out
+  people = subscriber.get_activity_usernames() | set(USER_ALIAS_LOOKUP) | set(USER_ALIAS_LOOKUP.values())
+  anonymizer.update(hostnames=subscriber.get_ws_names(), usernames=people, ips=subscriber.get_known_ips())
+  anonymizer.update(hostnames=[], usernames=subscriber.get_known_usernames(), ips=[])
+  # Links on demo pages carry fake workstation names; map them back before the view runs
+  if values and "wsname" in values:
+    values["wsname"] = anonymizer.unmask(values["wsname"])
+
+@app.after_request
+def demo_anonymize(response):
+  if current_app.demo_anonymizer is None or response.direct_passthrough or response.mimetype not in ("text/html", "text/plain", "application/json"):
+    return response
+  response.set_data(demo_text(response.get_data(as_text=True)))
+  return response
 
 @app.route('/index_old')
 def index():
@@ -120,7 +148,7 @@ def global_stats():
       cache_age = now - _global_stats_cache["timestamp"]
       if cache_age >= _global_stats_cache_ttl_sec:
         logger.debug(f"Refreshing global stats cache (age {cache_age:.2f}s)")
-        _global_stats_cache["payload"] = current_app.subscriber.get_stats_recap()
+        _global_stats_cache["payload"] = current_app.subscriber.get_stats_recap(cell_filter=demo_text)
         _global_stats_cache["timestamp"] = now
       stats = _global_stats_cache["payload"]
     return Response(stats, mimetype="text/plain")
@@ -132,7 +160,7 @@ def user_usage_percent(duration_sec):
   total_minutes = duration // 60
   usage_percent = {user: (minutes / total_minutes) * 100 for user, minutes in usage_minutes.items() if total_minutes > 0}
   usage_percent = {k: v for k, v in usage_percent.items() if v >= 0.1}
-  sorted_usage = sorted(usage_percent.items(), key=lambda item: item[1], reverse=True)
+  sorted_usage = sorted(((demo_text(user), percent) for user, percent in usage_percent.items()), key=lambda item: item[1], reverse=True)
 
   if not sorted_usage:
     usage_percent_text = ""
@@ -270,7 +298,7 @@ def ws_details_page(wsname):
   disk_usage_text = None
   disk_usage_time = None
   if disk_users is not None:
-    rows = sorted(disk_users["used_bytes_by_user"].items(), key=lambda item: item[1], reverse=True)
+    rows = sorted(((demo_text(user), used) for user, used in disk_users["used_bytes_by_user"].items()), key=lambda item: item[1], reverse=True)
     name_width = max((len(user) for user, _ in rows), default=0)
     total = disk_users.get("total_bytes")  # absent from older publishers
     disk_usage_text = "\n".join(f"{user.ljust(name_width)}  {format_bytes(used):>10}" + (f"  {used/total*100:5.1f}%" if total else "")
@@ -307,7 +335,14 @@ def main():
   ap.add_argument("--workers", type=int, default=1, help="Number of gunicorn workers (only used without --dev-server).")
   ap.add_argument("--install-service", action="store_true",
                    help="Install and enable a systemd --user service that runs this server on boot, then exit.")
+  ap.add_argument("--demo", action="store_true",
+                   help="Replace workstation names, usernames and IPs with made-up ones in every page, e.g. to record a demo.")
   args = ap.parse_args()
+
+  if args.demo:
+    from ws_monitor.demo import DemoAnonymizer
+    app.demo_anonymizer = DemoAnonymizer()
+    logger.info("Demo mode: workstation names, usernames and IPs are replaced with made-up ones")
 
   if args.install_service:
     import shlex
@@ -319,6 +354,8 @@ def main():
       exec_parts.append("--dev-server")
     else:
       exec_parts += ["--workers", str(args.workers)]
+    if args.demo:
+      exec_parts.append("--demo")
     install_user_service(service_name="wsmonitor-server",
                           description="WSMonitor Web Server",
                           exec_start=shlex.join(exec_parts))

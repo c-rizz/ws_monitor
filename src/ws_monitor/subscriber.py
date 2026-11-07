@@ -531,10 +531,35 @@ class Subscriber():
                 status = self.stats[data["hostname"]]
             self.stats[data["hostname"]] = status.update_data(data)
 
+    def get_activity_usernames(self) -> set[str]:
+        """Everyone in any workstation's activity history."""
+        with self.data_rlock:
+            return {user for ws_status in self.stats.values() for user in ws_status.get_usage_stats().users}
+
+    def get_known_usernames(self) -> set[str]:
+        """Every username that could show up anywhere in the web interface, across all workstations."""
+        names = self.get_activity_usernames()
+        with self.data_rlock:
+            for ws_status in self.stats.values():
+                data = ws_status.data
+                names.update(data.get("cpu", {}).get("memratio_by_user", {}))
+                names.update(data.get("cpu", {}).get("cores_by_user", {}))
+                for gpu in data.get("gpu", {}).values():
+                    names.update(gpu.get("memratio_by_user", {}))
+                names.update((data.get("disk_users") or {}).get("used_bytes_by_user", {}))
+                names.update(getattr(ws_status, "active_users_in_last_minute", []))
+        return names
+
+    def get_known_ips(self) -> set[str]:
+        with self.data_rlock:
+            return {ws_status.data["ip"] for ws_status in self.stats.values() if ws_status.data.get("ip")}
+
     def get_ws_names(self):
         return [name for name in self.stats.keys()]
 
-    def get_stats_recap(self):
+    def get_stats_recap(self, cell_filter = lambda cell: cell):
+        """The main page's table as space-aligned text. cell_filter is applied to each cell
+        before the column widths are computed, so it can change the cells' length."""
         stats_list = self.get_stats_recap_dictlist()
         s = ""
         lines = []
@@ -560,7 +585,8 @@ class Subscriber():
                 lines.append(  [f"{all_stats['hostname']}",
                                 f"[{format_age(all_stats['age'])}]",
                                 f" {all_stats['status']}"])
-        
+        lines = [[cell_filter(cell) for cell in line] for line in lines]
+
         if len(lines)>0:
             cols = 0
             for line in lines:
